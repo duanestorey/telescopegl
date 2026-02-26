@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -7,14 +5,12 @@
 # Licensed under MIT License.
 
 import os
-import pytest
 
-from polymerase.tests import TEST_DATA_DIR
 from polymerase.annotation import get_annotation_class
+from polymerase.tests import TEST_DATA_DIR
 
 
 class TestAnnotationIntervalTree:
-
     @classmethod
     def setup_class(cls):
         cls.AnnotationClass = get_annotation_class('intervaltree')
@@ -53,13 +49,13 @@ class TestAnnotationIntervalTree:
         assert not self.A.intersect_blocks('chrX', [(1, 1000000000)])
 
     def test_simple_lookups(self):
-        lines = (l.strip('\n').split('\t') for l in open(self.gtffile, 'r'))
+        lines = (l.strip('\n').split('\t') for l in open(self.gtffile))
         for l in lines:
             iv = (int(l[3]), int(l[4]))
             loc = l[8].split('"')[1]
             r = self.A.intersect_blocks(l[0], [iv])
             assert loc in r
-            assert (r[loc] - 1) == (iv[1] - iv[0]), '{} not equal to {}'.format(r[loc], iv[1] - iv[0])
+            assert (r[loc] - 1) == (iv[1] - iv[0]), f'{r[loc]} not equal to {iv[1] - iv[0]}'
 
     def test_overlap_lookups(self):
         assert self.A.intersect_blocks('chr1', [(1, 10000)])['locus1'] == 1

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
@@ -64,7 +63,7 @@ class BenchOpts:
         self.theta_prior = 200000
 
     def outfile_path(self, suffix):
-        return os.path.join(self.outdir, '%s-%s' % (self.exp_tag, suffix))
+        return os.path.join(self.outdir, f'{self.exp_tag}-{suffix}')
 
 
 def print_table(results, title='Benchmark Results'):
@@ -82,42 +81,48 @@ def print_table(results, title='Benchmark Results'):
     print(border)
 
     rows = [
-        ('Annotation load ({} loci)'.format(results.get('n_features', '?')),
-         '{:.1f}ms'.format(results['annotation_s'] * 1000)),
-        ('BAM load ({} frags)'.format(results.get('n_fragments', '?')),
-         '{:.0f}ms'.format(results['bam_load_s'] * 1000)),
-        ('Matrix build ({}x{}, {} nnz)'.format(
-            *results.get('matrix_shape', ['?', '?']),
-            results.get('nnz', '?')),
-         '(included in BAM load)'),
-        ('EM init',
-         '{:.1f}ms'.format(results['em_init_s'] * 1000)),
-        ('EM convergence ({} iters)'.format(results.get('em_iters', '?')),
-         '{:.1f}ms'.format(results['em_converge_s'] * 1000)),
-        ('  E-step',
-         '{:.2f}ms/iter'.format(results['estep_ms'])),
-        ('  M-step',
-         '{:.2f}ms/iter'.format(results['mstep_ms'])),
-        ('  Log-likelihood calc',
-         '{:.2f}ms/iter'.format(results['lnl_calc_ms'])),
-        ('Reassignment (7 modes)',
-         '{:.1f}ms'.format(results['reassign_s'] * 1000)),
-        ('Memory peak',
-         '{:.1f} MB'.format(results['memory_peak_mb'])),
+        (
+            'Annotation load ({} loci)'.format(results.get('n_features', '?')),
+            '{:.1f}ms'.format(results['annotation_s'] * 1000),
+        ),
+        (
+            'BAM load ({} frags)'.format(results.get('n_fragments', '?')),
+            '{:.0f}ms'.format(results['bam_load_s'] * 1000),
+        ),
+        (
+            'Matrix build ({}x{}, {} nnz)'.format(*results.get('matrix_shape', ['?', '?']), results.get('nnz', '?')),
+            '(included in BAM load)',
+        ),
+        ('EM init', '{:.1f}ms'.format(results['em_init_s'] * 1000)),
+        (
+            'EM convergence ({} iters)'.format(results.get('em_iters', '?')),
+            '{:.1f}ms'.format(results['em_converge_s'] * 1000),
+        ),
+        ('  E-step', '{:.2f}ms/iter'.format(results['estep_ms'])),
+        ('  M-step', '{:.2f}ms/iter'.format(results['mstep_ms'])),
+        ('  Log-likelihood calc', '{:.2f}ms/iter'.format(results['lnl_calc_ms'])),
+        ('Reassignment (7 modes)', '{:.1f}ms'.format(results['reassign_s'] * 1000)),
+        ('Memory peak', '{:.1f} MB'.format(results['memory_peak_mb'])),
     ]
 
     if 'decompose_s' in results:
-        rows.insert(4, (
-            'Block decomposition ({} blocks)'.format(
-                results.get('n_blocks', '?')),
-            '{:.1f}ms'.format(results['decompose_s'] * 1000)))
-        rows.insert(5, (
-            'EM parallel ({} blocks)'.format(
-                results.get('n_blocks', '?')),
-            '{:.1f}ms'.format(results['em_parallel_s'] * 1000)))
+        rows.insert(
+            4,
+            (
+                'Block decomposition ({} blocks)'.format(results.get('n_blocks', '?')),
+                '{:.1f}ms'.format(results['decompose_s'] * 1000),
+            ),
+        )
+        rows.insert(
+            5,
+            (
+                'EM parallel ({} blocks)'.format(results.get('n_blocks', '?')),
+                '{:.1f}ms'.format(results['em_parallel_s'] * 1000),
+            ),
+        )
 
     for stage, timing in rows:
-        print('| {:33s} | {:16s} |'.format(stage, timing))
+        print(f'| {stage:33s} | {timing:16s} |')
         print(border)
 
     total = results.get('total_s', 0)
@@ -141,28 +146,32 @@ def run_benchmark(backend_mode='auto', repeat=3):
     active = backend.get_backend()
 
     if not os.path.exists(BAM_1PCT):
-        print(f"ERROR: BAM not found: {BAM_1PCT}")
-        print("Place SRR9666161_1pct_collated.bam in test_data/")
+        print(f'ERROR: BAM not found: {BAM_1PCT}')
+        print('Place SRR9666161_1pct_collated.bam in test_data/')
         sys.exit(1)
     if not os.path.exists(ANNOTATION_FULL):
-        print(f"ERROR: Annotation not found: {ANNOTATION_FULL}")
-        print("Download: wget -O test_data/retro.hg38.gtf "
-              "https://github.com/mlbendall/telescope_annotation_db/raw/master/"
-              "builds/retro.hg38.v1/transcripts.gtf")
+        print(f'ERROR: Annotation not found: {ANNOTATION_FULL}')
+        print(
+            'Download: wget -O test_data/retro.hg38.gtf '
+            'https://github.com/mlbendall/telescope_annotation_db/raw/master/'
+            'builds/retro.hg38.v1/transcripts.gtf'
+        )
         sys.exit(1)
 
     outdir = tempfile.mkdtemp()
     opts = BenchOpts(BAM_1PCT, ANNOTATION_FULL, outdir)
 
     from polymerase.annotation import get_annotation_class
-    from polymerase.core.model import Polymerase
     from polymerase.core.likelihood import PolymeraseLikelihood
+    from polymerase.core.model import Polymerase
 
     results = OrderedDict()
     results['backend'] = active.name
 
-    print(f'Backend: {active.name} (numba={active.has_numba}, '
-          f'mkl={active.has_mkl}, threadsafe={active.threadsafe_parallelism})')
+    print(
+        f'Backend: {active.name} (numba={active.has_numba}, '
+        f'mkl={active.has_mkl}, threadsafe={active.threadsafe_parallelism})'
+    )
     print(f'BAM: {BAM_1PCT}')
     print(f'Annotation: {ANNOTATION_FULL}')
     print(f'Repeat: {repeat}x')
@@ -195,7 +204,7 @@ def run_benchmark(backend_mode='auto', repeat=3):
     results['n_ambig'] = ts.run_info.get('overlap_ambig', 0)
 
     if results['n_unique'] + results['n_ambig'] == 0:
-        print("WARNING: No fragments overlap annotation. Check BAM/GTF compatibility.")
+        print('WARNING: No fragments overlap annotation. Check BAM/GTF compatibility.')
         sys.exit(1)
 
     # --- 3. EM init + convergence ---
@@ -267,7 +276,7 @@ def run_benchmark(backend_mode='auto', repeat=3):
     results['lnl_calc_ms'] = np.median(lnl_times) * 1000
 
     # --- 5. Block decomposition + parallel EM ---
-    from polymerase.sparse.decompose import find_blocks, split_matrix
+    from polymerase.sparse.decompose import find_blocks
 
     decomp_times = []
     for _ in range(repeat):
@@ -327,14 +336,10 @@ def run_benchmark(backend_mode='auto', repeat=3):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='Polymerase benchmark on 1%% subsampled BAM')
-    parser.add_argument('--repeat', type=int, default=3,
-                        help='Repetitions per stage (default: 3)')
-    parser.add_argument('--backend', choices=['stock', 'auto'], default='auto',
-                        help='Backend mode (default: auto)')
-    parser.add_argument('--output', type=str, default=None,
-                        help='Output JSON file')
+    parser = argparse.ArgumentParser(description='Polymerase benchmark on 1%% subsampled BAM')
+    parser.add_argument('--repeat', type=int, default=3, help='Repetitions per stage (default: 3)')
+    parser.add_argument('--backend', choices=['stock', 'auto'], default='auto', help='Backend mode (default: auto)')
+    parser.add_argument('--output', type=str, default=None, help='Output JSON file')
     args = parser.parse_args()
 
     results = run_benchmark(backend_mode=args.backend, repeat=args.repeat)

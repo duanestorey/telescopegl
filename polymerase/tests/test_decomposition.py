@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -14,23 +12,23 @@ Tests cover:
 - Round-trip: split_matrix -> merge_results
 - Bundled test data confirms 1 component (all ERVK)
 """
+
 import os
 
 import numpy as np
 import pytest
+import scipy.sparse
 from numpy.testing import assert_array_almost_equal
 
-import scipy.sparse
+from polymerase.sparse.decompose import find_blocks, merge_results, split_matrix
 from polymerase.sparse.matrix import csr_matrix_plus
-from polymerase.sparse.decompose import find_blocks, split_matrix, merge_results
 
 # Path to bundled test data
-DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data'
-)
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 
 
 # --- Fixtures ---
+
 
 @pytest.fixture
 def two_block_matrix():
@@ -40,30 +38,36 @@ def two_block_matrix():
     No cross-mapping between blocks.
     """
     # 6 fragments x 4 features
-    return csr_matrix_plus([
-        [10,  5,  0,  0],   # row 0: maps to feat 0,1
-        [ 8,  0,  0,  0],   # row 1: maps to feat 0 only
-        [ 0,  7,  0,  0],   # row 2: maps to feat 1 only
-        [ 0,  0, 12,  3],   # row 3: maps to feat 2,3
-        [ 0,  0,  0,  9],   # row 4: maps to feat 3 only
-        [ 0,  0,  6,  0],   # row 5: maps to feat 2 only
-    ], dtype=np.float64)
+    return csr_matrix_plus(
+        [
+            [10, 5, 0, 0],  # row 0: maps to feat 0,1
+            [8, 0, 0, 0],  # row 1: maps to feat 0 only
+            [0, 7, 0, 0],  # row 2: maps to feat 1 only
+            [0, 0, 12, 3],  # row 3: maps to feat 2,3
+            [0, 0, 0, 9],  # row 4: maps to feat 3 only
+            [0, 0, 6, 0],  # row 5: maps to feat 2 only
+        ],
+        dtype=np.float64,
+    )
 
 
 @pytest.fixture
 def single_block_matrix():
     """All features connected through shared reads."""
-    return csr_matrix_plus([
-        [10,  5,  0],
-        [ 0,  7,  3],
-        [ 4,  0,  6],
-    ], dtype=np.float64)
+    return csr_matrix_plus(
+        [
+            [10, 5, 0],
+            [0, 7, 3],
+            [4, 0, 6],
+        ],
+        dtype=np.float64,
+    )
 
 
 # --- find_blocks ---
 
-class TestFindBlocks:
 
+class TestFindBlocks:
     def test_two_blocks(self, two_block_matrix):
         n_comp, labels = find_blocks(two_block_matrix)
         assert n_comp == 2
@@ -92,8 +96,8 @@ class TestFindBlocks:
 
 # --- split_matrix ---
 
-class TestSplitMatrix:
 
+class TestSplitMatrix:
     def test_two_blocks_split(self, two_block_matrix):
         n_comp, labels = find_blocks(two_block_matrix)
         blocks = split_matrix(two_block_matrix, labels, n_comp)
@@ -118,16 +122,13 @@ class TestSplitMatrix:
 
         for sub_matrix, feat_indices, row_indices in blocks:
             original_sub = two_block_matrix[row_indices][:, feat_indices]
-            assert_array_almost_equal(
-                sub_matrix.toarray(),
-                original_sub.toarray()
-            )
+            assert_array_almost_equal(sub_matrix.toarray(), original_sub.toarray())
 
 
 # --- merge_results round-trip ---
 
-class TestMergeResults:
 
+class TestMergeResults:
     def test_round_trip_pi_theta(self, two_block_matrix):
         """Merge should reconstruct pi and theta arrays at correct indices."""
         n_comp, labels = find_blocks(two_block_matrix)
@@ -144,9 +145,7 @@ class TestMergeResults:
             lnl_b = 100.0
             block_results.append((pi_b, theta_b, z_b, lnl_b))
 
-        pi, theta, z_rows, z_cols, z_data, lnl = merge_results(
-            block_results, blocks, K
-        )
+        pi, theta, z_rows, z_cols, z_data, lnl = merge_results(block_results, blocks, K)
 
         assert pi.shape == (K,)
         assert theta.shape == (K,)
@@ -173,35 +172,31 @@ class TestMergeResults:
             lnl_b = 50.0
             block_results.append((pi_b, theta_b, z_b, lnl_b))
 
-        pi, theta, z_rows, z_cols, z_data, lnl = merge_results(
-            block_results, blocks, K
-        )
+        pi, theta, z_rows, z_cols, z_data, lnl = merge_results(block_results, blocks, K)
 
         # All row indices should be valid
         assert np.all(z_rows < N)
         assert np.all(z_cols < K)
 
         # Reconstruct z as CSR
-        z = scipy.sparse.csr_matrix(
-            (z_data, (z_rows, z_cols)), shape=(N, K)
-        )
+        z = scipy.sparse.csr_matrix((z_data, (z_rows, z_cols)), shape=(N, K))
         assert z.shape == (N, K)
 
 
 # --- Bundled test data ---
 
-class TestBundledData:
 
+class TestBundledData:
     def test_bundled_data_single_block(self):
         """Bundled test data (ERVK family) should be 1 connected component."""
-        from polymerase.core.model import Polymerase
         from polymerase.annotation import get_annotation_class
+        from polymerase.core.model import Polymerase
 
         samfile = os.path.join(DATA_DIR, 'alignment.bam')
         gtffile = os.path.join(DATA_DIR, 'annotation.gtf')
 
         if not os.path.exists(samfile) or not os.path.exists(gtffile):
-            pytest.skip("Bundled test data not found")
+            pytest.skip('Bundled test data not found')
 
         import tempfile
 
@@ -232,4 +227,4 @@ class TestBundledData:
         ts.load_alignment(annot)
 
         n_comp, labels = find_blocks(ts.raw_scores)
-        assert n_comp == 1, f"Expected 1 block for ERVK data, got {n_comp}"
+        assert n_comp == 1, f'Expected 1 block for ERVK data, got {n_comp}'

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -22,11 +20,11 @@ class CpuOps(ComputeOps):
 
     @property
     def device(self) -> str:
-        return "cpu"
+        return 'cpu'
 
     @property
     def name(self) -> str:
-        return "CPU (scipy/numpy)"
+        return 'CPU (scipy/numpy)'
 
     # --- Sparse matrix operations ---
 
@@ -35,12 +33,14 @@ class CpuOps(ComputeOps):
 
     def norm(self, matrix, axis):
         from ..sparse.matrix import csr_matrix_plus
+
         if not isinstance(matrix, csr_matrix_plus):
             matrix = csr_matrix_plus(matrix)
         return matrix.norm(axis)
 
     def scale(self, matrix, axis):
         from ..sparse.matrix import csr_matrix_plus
+
         if not isinstance(matrix, csr_matrix_plus):
             matrix = csr_matrix_plus(matrix)
         return matrix.scale(axis)
@@ -54,12 +54,14 @@ class CpuOps(ComputeOps):
 
     def binmax(self, matrix, axis):
         from ..sparse.matrix import csr_matrix_plus
+
         if not isinstance(matrix, csr_matrix_plus):
             matrix = csr_matrix_plus(matrix)
         return matrix.binmax(axis)
 
     def threshold(self, matrix, thresh):
         from ..sparse.matrix import csr_matrix_plus
+
         if not isinstance(matrix, csr_matrix_plus):
             matrix = csr_matrix_plus(matrix)
         return matrix.threshold_filter(thresh)
@@ -75,10 +77,12 @@ class CpuOps(ComputeOps):
 
     def nnls(self, A, b):
         from scipy.optimize import nnls
+
         return nnls(A, b)
 
     def nmf(self, matrix, n_components):
         from sklearn.decomposition import NMF
+
         model = NMF(n_components=n_components, init='nndsvd')
         W = model.fit_transform(matrix)
         H = model.components_

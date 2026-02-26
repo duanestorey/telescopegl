@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -11,8 +9,9 @@
 Reads the assign primer's counts and stats TSV files to compute normalized
 expression values using feature lengths and total mapped fragment counts.
 """
-import os
+
 import logging as lg
+import os
 
 import numpy as np
 import pandas as pd
@@ -25,30 +24,29 @@ class NormalizeCofactor(Cofactor):
 
     @property
     def name(self) -> str:
-        return "normalize"
+        return 'normalize'
 
     @property
     def primer_name(self) -> str:
-        return "assign"
+        return 'assign'
 
     @property
     def description(self) -> str:
-        return "Compute TPM, RPKM, and CPM normalized counts"
+        return 'Compute TPM, RPKM, and CPM normalized counts'
 
     def configure(self, opts, compute) -> None:
         self._compute = compute
 
-    def transform(self, primer_output_dir, output_dir, exp_tag, console=None,
-                  stopwatch=None) -> None:
-        counts_file = os.path.join(primer_output_dir, '%s-TE_counts.tsv' % exp_tag)
-        stats_file = os.path.join(primer_output_dir, '%s-run_stats.tsv' % exp_tag)
+    def transform(self, primer_output_dir, output_dir, exp_tag, console=None, stopwatch=None) -> None:
+        counts_file = os.path.join(primer_output_dir, f'{exp_tag}-TE_counts.tsv')
+        stats_file = os.path.join(primer_output_dir, f'{exp_tag}-run_stats.tsv')
 
         if not os.path.exists(counts_file):
-            lg.warning("normalize: counts file not found at {}".format(counts_file))
+            lg.warning(f'normalize: counts file not found at {counts_file}')
             return
 
         if not os.path.exists(stats_file):
-            lg.warning("normalize: stats file not found at {}".format(stats_file))
+            lg.warning(f'normalize: stats file not found at {stats_file}')
             return
 
         # Load counts
@@ -63,15 +61,23 @@ class NormalizeCofactor(Cofactor):
         # The first line contains both ## RunInfo... and the column headers
         # merged together. Data lines start from line 2.
         if len(raw_lines) < 2:
-            lg.warning("normalize: stats file too short")
+            lg.warning('normalize: stats file too short')
             return
         # Extract column names from the first line — they're the last
         # N tab-separated fields that match known column names
         first_fields = raw_lines[0].split('\t')
-        known_cols = {'transcript', 'transcript_length', 'final_conf',
-                      'final_prop', 'init_aligned', 'unique_count',
-                      'init_best', 'init_best_random', 'init_best_avg',
-                      'init_prop'}
+        _known_cols = {  # noqa: F841 — kept for documentation of expected column names
+            'transcript',
+            'transcript_length',
+            'final_conf',
+            'final_prop',
+            'init_aligned',
+            'unique_count',
+            'init_best',
+            'init_best_random',
+            'init_best_avg',
+            'init_prop',
+        }
         # Find where the real columns start
         col_start = 0
         for i, f in enumerate(first_fields):
@@ -79,7 +85,7 @@ class NormalizeCofactor(Cofactor):
             if 'transcript' in f and i > 0:
                 # Split off the "transcript" from e.g. "overlap_ambig:1000transcript"
                 if f != 'transcript':
-                    parts = f.split('transcript', 1)
+                    _parts = f.split('transcript', 1)  # noqa: F841
                     first_fields[i] = 'transcript'
                 col_start = i
                 break
@@ -87,6 +93,7 @@ class NormalizeCofactor(Cofactor):
 
         # Parse data lines using those columns
         import io
+
         data_text = '\t'.join(col_names) + '\n' + ''.join(raw_lines[1:])
         stats = pd.read_csv(io.StringIO(data_text), sep='\t')
 
@@ -95,7 +102,7 @@ class NormalizeCofactor(Cofactor):
             lengths = stats[['transcript', 'transcript_length']].drop_duplicates()
             df = counts.merge(lengths, on='transcript', how='left')
         else:
-            lg.warning("normalize: stats file missing transcript_length column")
+            lg.warning('normalize: stats file missing transcript_length column')
             return
 
         # Filter out zero-length features and __no_feature
@@ -116,9 +123,7 @@ class NormalizeCofactor(Cofactor):
         valid_len = ~np.isnan(lengths_kb) & (lengths_kb > 0)
         df['RPKM'] = 0.0
         if total_mapped > 0:
-            df.loc[valid_len, 'RPKM'] = (
-                raw_counts[valid_len] / (lengths_kb[valid_len] * total_mapped) * 1e6
-            )
+            df.loc[valid_len, 'RPKM'] = raw_counts[valid_len] / (lengths_kb[valid_len] * total_mapped) * 1e6
 
         # TPM: transcripts per million
         # rate = count / length, then normalize rates to sum to 1M
@@ -133,11 +138,10 @@ class NormalizeCofactor(Cofactor):
         for col in ['CPM', 'RPKM', 'TPM']:
             df[col] = df[col].round(4)
 
-        out_name = '%s-normalized_counts.tsv' % exp_tag
+        out_name = f'{exp_tag}-normalized_counts.tsv'
         out_file = os.path.join(output_dir, out_name)
-        df[['transcript', 'count', 'transcript_length', 'CPM', 'RPKM', 'TPM']].to_csv(
-            out_file, sep='\t', index=False)
-        lg.info("normalize: wrote {}".format(out_file))
+        df[['transcript', 'count', 'transcript_length', 'CPM', 'RPKM', 'TPM']].to_csv(out_file, sep='\t', index=False)
+        lg.info(f'normalize: wrote {out_file}')
 
         if console:
-            console.detail('normalize \u2192 {}'.format(out_name))
+            console.detail(f'normalize \u2192 {out_name}')

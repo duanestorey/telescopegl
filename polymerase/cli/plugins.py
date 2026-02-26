@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -20,30 +18,30 @@ def list_plugins(args):
     registry.discover()
     primers, cofactors = registry.list_available()
 
-    print("Primers:")
+    print('Primers:')
     if not primers:
-        print("  (none)")
+        print('  (none)')
     for name, info in sorted(primers.items()):
-        tag = " (built-in)" if info.get('builtin') else ""
+        tag = ' (built-in)' if info.get('builtin') else ''
         desc = info.get('description', '')
         ver = info.get('version', '?')
-        print("  {:20s} v{:<10s} {}{}".format(name, ver, desc, tag))
+        print(f'  {name:20s} v{ver:<10s} {desc}{tag}')
 
     print()
-    print("Cofactors:")
+    print('Cofactors:')
     if not cofactors:
-        print("  (none)")
+        print('  (none)')
     for name, info in sorted(cofactors.items()):
-        tag = " (built-in)" if info.get('builtin') else ""
+        tag = ' (built-in)' if info.get('builtin') else ''
         desc = info.get('description', '')
         primer = info.get('primer_name', '?')
-        print("  {:20s} for {:10s} {}{}".format(name, primer, desc, tag))
+        print(f'  {name:20s} for {primer:10s} {desc}{tag}')
 
 
 def install_plugin(args):
     """Install a primer/cofactor package via pip."""
     package = args.package
-    print("Installing {}...".format(package))
+    print(f'Installing {package}...')
     result = subprocess.run(
         [sys.executable, '-m', 'pip', 'install', package],
         capture_output=False,
@@ -51,5 +49,5 @@ def install_plugin(args):
     if result.returncode == 0:
         print("\nInstalled. Run 'polymerase list-plugins' to verify.")
     else:
-        print("\nInstallation failed (exit code {}).".format(result.returncode))
+        print(f'\nInstallation failed (exit code {result.returncode}).')
     sys.exit(result.returncode)

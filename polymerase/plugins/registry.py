@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -11,7 +9,7 @@
 import logging as lg
 from importlib.metadata import entry_points
 
-from .abc import Primer, Cofactor
+from .abc import Cofactor, Primer
 
 
 class PluginRegistry:
@@ -24,7 +22,7 @@ class PluginRegistry:
     def __init__(self):
         self._primers: list[Primer] = []
         self._cofactors: list[Cofactor] = []
-        self._all_primer_eps = {}   # name -> entry_point
+        self._all_primer_eps = {}  # name -> entry_point
         self._all_cofactor_eps = {}
 
     # -- Discovery -----------------------------------------------------------
@@ -55,18 +53,18 @@ class PluginRegistry:
         # Load primers
         for name in names_to_load:
             if name not in self._all_primer_eps:
-                lg.warning("Primer '{}' not found, skipping".format(name))
+                lg.warning(f"Primer '{name}' not found, skipping")
                 continue
             try:
                 cls = self._all_primer_eps[name].load()
                 instance = cls()
                 if not isinstance(instance, Primer):
-                    lg.warning("'{}' is not a Primer subclass, skipping".format(name))
+                    lg.warning(f"'{name}' is not a Primer subclass, skipping")
                     continue
                 self._primers.append(instance)
-                lg.info("Loaded primer: {} v{}".format(instance.name, instance.version))
+                lg.info(f'Loaded primer: {instance.name} v{instance.version}')
             except Exception as exc:
-                lg.warning("Failed to load primer '{}': {}".format(name, exc))
+                lg.warning(f"Failed to load primer '{name}': {exc}")
 
         # Load cofactors whose primer is active
         active_primer_names = {p.name for p in self._primers}
@@ -75,17 +73,15 @@ class PluginRegistry:
                 cls = ep.load()
                 instance = cls()
                 if not isinstance(instance, Cofactor):
-                    lg.warning("'{}' is not a Cofactor subclass, skipping".format(name))
+                    lg.warning(f"'{name}' is not a Cofactor subclass, skipping")
                     continue
                 if instance.primer_name not in active_primer_names:
-                    lg.debug("Cofactor '{}' skipped (primer '{}' not active)".format(
-                        name, instance.primer_name))
+                    lg.debug(f"Cofactor '{name}' skipped (primer '{instance.primer_name}' not active)")
                     continue
                 self._cofactors.append(instance)
-                lg.info("Loaded cofactor: {} (for primer '{}')".format(
-                    instance.name, instance.primer_name))
+                lg.info(f"Loaded cofactor: {instance.name} (for primer '{instance.primer_name}')")
             except Exception as exc:
-                lg.warning("Failed to load cofactor '{}': {}".format(name, exc))
+                lg.warning(f"Failed to load cofactor '{name}': {exc}")
 
     # -- Configuration -------------------------------------------------------
 
@@ -95,13 +91,13 @@ class PluginRegistry:
             try:
                 p.configure(opts, compute_ops)
             except Exception as exc:
-                lg.warning("Primer '{}' configure failed: {}".format(p.name, exc))
+                lg.warning(f"Primer '{p.name}' configure failed: {exc}")
 
         for c in self._cofactors:
             try:
                 c.configure(opts, compute_ops)
             except Exception as exc:
-                lg.warning("Cofactor '{}' configure failed: {}".format(c.name, exc))
+                lg.warning(f"Cofactor '{c.name}' configure failed: {exc}")
 
     # -- Hook notification ---------------------------------------------------
 
@@ -119,8 +115,7 @@ class PluginRegistry:
             try:
                 method(snapshot)
             except Exception as exc:
-                lg.warning("Primer '{}' {} failed: {}".format(
-                    p.name, hook_name, exc))
+                lg.warning(f"Primer '{p.name}' {hook_name} failed: {exc}")
 
     # -- Commit & transform --------------------------------------------------
 
@@ -131,18 +126,16 @@ class PluginRegistry:
         for p in self._primers:
             primer_dir = output_dir  # default primer writes to top-level
             if console:
-                console.section('Running {}...'.format(p.name))
+                console.section(f'Running {p.name}...')
             try:
-                lg.info("Committing primer: {}".format(p.name))
-                p.commit(primer_dir, exp_tag, console=console,
-                         stopwatch=stopwatch)
+                lg.info(f'Committing primer: {p.name}')
+                p.commit(primer_dir, exp_tag, console=console, stopwatch=stopwatch)
             except Exception as exc:
-                lg.warning("Primer '{}' commit failed: {}".format(p.name, exc))
+                lg.warning(f"Primer '{p.name}' commit failed: {exc}")
                 continue
 
             # Run cofactors for this primer
-            _primer_cofactors = [c for c in self._cofactors
-                                 if c.primer_name == p.name]
+            _primer_cofactors = [c for c in self._cofactors if c.primer_name == p.name]
             if _primer_cofactors:
                 if stopwatch:
                     stopwatch.start('Cofactors')
@@ -153,18 +146,16 @@ class PluginRegistry:
                 cofactor_dir = os.path.join(output_dir, c.name)
                 os.makedirs(cofactor_dir, exist_ok=True)
                 try:
-                    lg.info("Running cofactor: {} (for {})".format(c.name, p.name))
+                    lg.info(f'Running cofactor: {c.name} (for {p.name})')
                     if stopwatch:
                         stopwatch.start(c.name, level=1)
-                    c.transform(primer_dir, cofactor_dir, exp_tag,
-                                console=console, stopwatch=stopwatch)
+                    c.transform(primer_dir, cofactor_dir, exp_tag, console=console, stopwatch=stopwatch)
                     if stopwatch:
                         stopwatch.stop()
                 except Exception as exc:
                     if stopwatch:
                         stopwatch.stop()
-                    lg.warning("Cofactor '{}' transform failed: {}".format(
-                        c.name, exc))
+                    lg.warning(f"Cofactor '{c.name}' transform failed: {exc}")
             if _primer_cofactors and stopwatch:
                 # Stop the top-level Cofactors timer if sub-stages didn't
                 # already consume it (stop is safe to call when inactive)

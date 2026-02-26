@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Comprehensive tests for csr_matrix_plus sparse matrix class.
 
 Tests all methods: norm, scale, binmax, choose_random, apply_func,
@@ -21,6 +20,7 @@ def sparse_equal(m1, m2):
 
 
 # --- Fixtures ---
+
 
 @pytest.fixture
 def m3x3():
@@ -54,6 +54,7 @@ def m_ties():
 
 # --- Identity / element access ---
 
+
 def test_identity(m3x3):
     assert m3x3[0, 0] == 1
     assert m3x3[0, 1] == 0
@@ -66,34 +67,25 @@ def test_identity(m3x3):
 
 # --- norm ---
 
+
 def test_norm_all(m3x3):
     total = 1 + 2 + 3 + 4 + 5 + 6  # 21
     result = m3x3.norm()
-    expected = csr_matrix_plus([
-        [1./total, 0, 2./total],
-        [0, 0, 3./total],
-        [4./total, 5./total, 6./total]
-    ])
+    expected = csr_matrix_plus(
+        [[1.0 / total, 0, 2.0 / total], [0, 0, 3.0 / total], [4.0 / total, 5.0 / total, 6.0 / total]]
+    )
     assert sparse_equal(result, expected)
 
 
 def test_norm_row(m3x3):
     result = m3x3.norm(1)
-    expected = csr_matrix_plus([
-        [1./3, 0, 2./3],
-        [0, 0, 1.],
-        [4./15, 5./15, 6./15]
-    ])
+    expected = csr_matrix_plus([[1.0 / 3, 0, 2.0 / 3], [0, 0, 1.0], [4.0 / 15, 5.0 / 15, 6.0 / 15]])
     assert sparse_equal(result, expected)
 
 
 def test_norm_row_with_zero_row(m_with_zero_row):
     result = m_with_zero_row.norm(1)
-    expected = csr_matrix_plus([
-        [1./3, 0, 2./3],
-        [0, 0, 0],
-        [4./15, 5./15, 6./15]
-    ])
+    expected = csr_matrix_plus([[1.0 / 3, 0, 2.0 / 3], [0, 0, 0], [4.0 / 15, 5.0 / 15, 6.0 / 15]])
     assert sparse_equal(result, expected)
 
 
@@ -104,29 +96,22 @@ def test_norm_preserves_type(m3x3):
 
 def test_norm_single_row(m_single_row):
     result = m_single_row.norm(1)
-    assert_array_almost_equal(result.toarray(), [[3./10, 0, 7./10]])
+    assert_array_almost_equal(result.toarray(), [[3.0 / 10, 0, 7.0 / 10]])
 
 
 # --- scale ---
 
+
 def test_scale_global(m3x3):
     result = m3x3.scale()
     # max value is 6, so everything divides by 6
-    expected = np.array([
-        [1./6, 0, 2./6],
-        [0, 0, 3./6],
-        [4./6, 5./6, 1.]
-    ])
+    expected = np.array([[1.0 / 6, 0, 2.0 / 6], [0, 0, 3.0 / 6], [4.0 / 6, 5.0 / 6, 1.0]])
     assert_array_almost_equal(result.toarray(), expected)
 
 
 def test_scale_row(m3x3):
     result = m3x3.scale(1)
-    expected = np.array([
-        [1./2, 0, 1.],
-        [0, 0, 1.],
-        [4./6, 5./6, 1.]
-    ])
+    expected = np.array([[1.0 / 2, 0, 1.0], [0, 0, 1.0], [4.0 / 6, 5.0 / 6, 1.0]])
     assert_array_almost_equal(result.toarray(), expected)
 
 
@@ -137,29 +122,22 @@ def test_scale_preserves_type(m3x3):
 
 def test_scale_single_row(m_single_row):
     result = m_single_row.scale(1)
-    assert_array_almost_equal(result.toarray(), [[3./7, 0, 1.]])
+    assert_array_almost_equal(result.toarray(), [[3.0 / 7, 0, 1.0]])
 
 
 # --- binmax ---
 
+
 def test_binmax_row(m3x3):
     result = m3x3.binmax(1)
-    expected = csr_matrix_plus([
-        [0, 0, 1],
-        [0, 0, 1],
-        [0, 0, 1]
-    ])
+    expected = csr_matrix_plus([[0, 0, 1], [0, 0, 1], [0, 0, 1]])
     assert sparse_equal(result, expected)
 
 
 def test_binmax_with_ties(m_ties):
     result = m_ties.binmax(1)
     # Both 5s should be 1, both 3s should be 1
-    expected = csr_matrix_plus([
-        [1, 0, 1],
-        [1, 1, 0],
-        [0, 0, 1]
-    ])
+    expected = csr_matrix_plus([[1, 0, 1], [1, 1, 0], [0, 0, 1]])
     assert sparse_equal(result, expected)
 
 
@@ -176,13 +154,14 @@ def test_binmax_single_row(m_single_row):
 
 # --- choose_random ---
 
+
 def test_choose_random_selects_one_per_row(m3x3):
     np.random.seed(42)
     result = m3x3.choose_random(1)
     # Each row should have at most 1 nonzero
     for i in range(result.shape[0]):
         row_nnz = result[i].nnz
-        assert row_nnz <= 1, f"Row {i} has {row_nnz} nonzeros, expected <= 1"
+        assert row_nnz <= 1, f'Row {i} has {row_nnz} nonzeros, expected <= 1'
 
 
 def test_choose_random_preserves_type(m3x3):
@@ -211,14 +190,11 @@ def test_choose_random_deterministic_with_seed():
 
 # --- apply_func ---
 
+
 def test_apply_func_threshold(m3x3_float):
     result = m3x3_float.apply_func(lambda x: x if x >= 3.0 else 0)
     # apply_func doesn't eliminate zeros, so check dense output
-    expected = np.array([
-        [0, 0, 0],
-        [0, 0, 3.0],
-        [4.0, 5.0, 6.0]
-    ])
+    expected = np.array([[0, 0, 0], [0, 0, 3.0], [4.0, 5.0, 6.0]])
     assert_array_almost_equal(result.toarray(), expected)
 
 
@@ -241,6 +217,7 @@ def test_apply_func_preserves_type(m3x3_float):
 
 # --- count ---
 
+
 def test_count_row(m3x3):
     result = m3x3.count(1)
     expected = np.array([[2], [1], [3]])
@@ -261,6 +238,7 @@ def test_count_single_row(m_single_row):
 
 # --- check_equal ---
 
+
 def test_check_equal_same(m3x3):
     assert m3x3.check_equal(m3x3.copy())
 
@@ -278,6 +256,7 @@ def test_check_equal_different_shape():
 
 
 # --- save / load ---
+
 
 def test_save_load(m3x3):
     outfile = TemporaryFile()
@@ -297,6 +276,7 @@ def test_save_load_float(m3x3_float):
 
 # --- ceil ---
 
+
 def test_ceil():
     m = csr_matrix_plus([[0.3, 0, 1.7], [0, 0, 2.1]])
     result = m.ceil()
@@ -305,6 +285,7 @@ def test_ceil():
 
 
 # --- expm1 / log1p ---
+
 
 def test_expm1(m3x3_float):
     result = m3x3_float.expm1()
@@ -328,6 +309,7 @@ def test_expm1_log1p_roundtrip(m3x3_float):
 
 
 # --- multiply (inherited from scipy but important for EM) ---
+
 
 def test_multiply_scalar(m3x3_float):
     result = m3x3_float.multiply(2.0)
@@ -353,6 +335,7 @@ def test_multiply_row_vector(m3x3_float):
 
 # --- astype ---
 
+
 def test_astype(m3x3_float):
     result = m3x3_float.astype(np.uint8)
     assert result.dtype == np.uint8
@@ -361,6 +344,7 @@ def test_astype(m3x3_float):
 
 
 # --- sum (inherited but critical for EM) ---
+
 
 def test_sum_all(m3x3):
     assert m3x3.sum() == 21
@@ -380,6 +364,7 @@ def test_sum_cols(m3x3):
 
 # --- max (inherited but used in scale/EM) ---
 
+
 def test_max_all(m3x3):
     assert m3x3.max() == 6
 
@@ -391,6 +376,7 @@ def test_max_rows(m3x3):
 
 
 # --- Integration: chained operations (like EM init) ---
+
 
 def test_em_init_chain():
     """Simulate the EM initialization: raw_scores.scale().multiply(100).expm1()"""

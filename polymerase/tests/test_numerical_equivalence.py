@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -13,22 +11,21 @@ Tests cover:
 - Standard EM vs block-parallel EM on single block: exact match
 - All 6 reassignment modes produce identical count vectors
 """
+
 import os
 import tempfile
 
 import numpy as np
 import pytest
-from numpy.testing import assert_array_almost_equal, assert_allclose
+from numpy.testing import assert_allclose
 
-from polymerase.sparse.matrix import csr_matrix_plus
-from polymerase.core.model import Polymerase
-from polymerase.core.likelihood import PolymeraseLikelihood
 from polymerase.annotation import get_annotation_class
+from polymerase.core.likelihood import PolymeraseLikelihood
+from polymerase.core.model import Polymerase
 from polymerase.sparse import backend
+from polymerase.sparse.matrix import csr_matrix_plus
 
-DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data'
-)
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 
 
 class MockOpts:
@@ -67,7 +64,7 @@ def pipeline_data():
     gtffile = os.path.join(DATA_DIR, 'annotation.gtf')
 
     if not os.path.exists(samfile) or not os.path.exists(gtffile):
-        pytest.skip("Bundled test data not found")
+        pytest.skip('Bundled test data not found')
 
     opts = MockOpts()
     Annotation = get_annotation_class('intervaltree')
@@ -78,6 +75,7 @@ def pipeline_data():
 
 
 # --- Stock vs CPU-optimized equivalence ---
+
 
 class TestStockVsOptimized:
     """Verify stock and optimized backends produce identical results."""
@@ -90,6 +88,7 @@ class TestStockVsOptimized:
         else:
             backend.configure()
             from polymerase.sparse.backend import get_sparse_class
+
             cls = get_sparse_class()
             scores = cls(raw_scores)
 
@@ -120,6 +119,7 @@ class TestStockVsOptimized:
 
 # --- Standard EM vs block-parallel EM ---
 
+
 class TestEMParallel:
     """Block-parallel on single-block data should match standard EM."""
 
@@ -142,14 +142,17 @@ class TestEMParallel:
 
     def test_multi_block_synthetic(self):
         """Synthetic 2-block matrix: parallel should converge correctly."""
-        scores = csr_matrix_plus([
-            [10,  5,  0,  0],
-            [ 8,  3,  0,  0],
-            [ 0,  7,  0,  0],
-            [ 0,  0, 12,  3],
-            [ 0,  0,  0,  9],
-            [ 0,  0,  6,  4],
-        ], dtype=np.float64)
+        scores = csr_matrix_plus(
+            [
+                [10, 5, 0, 0],
+                [8, 3, 0, 0],
+                [0, 7, 0, 0],
+                [0, 0, 12, 3],
+                [0, 0, 0, 9],
+                [0, 0, 6, 4],
+            ],
+            dtype=np.float64,
+        )
 
         class Opts:
             em_epsilon = 1e-7
@@ -173,6 +176,7 @@ class TestEMParallel:
 
 # --- All 6 reassignment modes produce identical count vectors ---
 
+
 class TestReassignmentEquivalence:
     """All reassignment modes should produce identical results across tiers."""
 
@@ -189,6 +193,7 @@ class TestReassignmentEquivalence:
         # Optimized
         backend.configure()
         from polymerase.sparse.backend import get_sparse_class
+
         cls = get_sparse_class()
         np.random.seed(42)
         tl_opt = PolymeraseLikelihood(cls(ts.raw_scores), opts)
@@ -199,5 +204,4 @@ class TestReassignmentEquivalence:
             counts_stock = tl_stock.reassign(mode, 0.9).sum(0).A1
             np.random.seed(123)
             counts_opt = tl_opt.reassign(mode, 0.9).sum(0).A1
-            assert_allclose(counts_stock, counts_opt, rtol=1e-10,
-                            err_msg=f"Mode '{mode}' counts differ")
+            assert_allclose(counts_stock, counts_opt, rtol=1e-10, err_msg=f"Mode '{mode}' counts differ")

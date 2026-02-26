@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -14,11 +12,13 @@ the base class methods when Numba is unavailable.
 """
 
 import numpy as np
+
 from .matrix import csr_matrix_plus
 
 try:
-    import numba
+    import numba  # noqa: F401
     from numba import njit, prange
+
     HAS_NUMBA = True
 except ImportError:
     HAS_NUMBA = False
@@ -94,12 +94,7 @@ class CpuOptimizedCsrMatrix(csr_matrix_plus):
         if not HAS_NUMBA or axis != 1:
             return super().binmax(axis)
 
-        _data = _binmax_kernel(
-            self.data.astype(np.float64),
-            self.indices,
-            self.indptr,
-            self.shape[0]
-        )
+        _data = _binmax_kernel(self.data.astype(np.float64), self.indices, self.indptr, self.shape[0])
         ret = type(self)(
             (_data, self.indices.copy(), self.indptr.copy()),
             shape=self.shape,

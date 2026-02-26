@@ -1,19 +1,16 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-""" Parse SAM/BAM alignment files
+"""Parse SAM/BAM alignment files"""
 
-"""
 from ..utils.helpers import merge_blocks
 
 
-class AlignedPair(object):
-    def __init__(self, r1, r2 = None):
+class AlignedPair:
+    def __init__(self, r1, r2=None):
         self.r1 = r1
         self.r2 = r2
         # set properties
@@ -22,7 +19,7 @@ class AlignedPair(object):
         self.is_unmapped = r1.is_unmapped
 
     def write(self, outfile):
-        """ Write AlignedPair to file
+        """Write AlignedPair to file
 
         :param outfile:
         :return:
@@ -43,15 +40,15 @@ class AlignedPair(object):
             self.r2.mapping_quality = value
 
     def set_flag(self, b):
-        self.r1.flag = (self.r1.flag | b)
+        self.r1.flag = self.r1.flag | b
         if self.r2:
-            self.r2.flag = (self.r2.flag | b)
+            self.r2.flag = self.r2.flag | b
         assert (self.r1.flag & b) == b
 
     def unset_flag(self, b):
-        self.r1.flag = (self.r1.flag ^ (self.r1.flag & b))
+        self.r1.flag = self.r1.flag ^ (self.r1.flag & b)
         if self.r2:
-            self.r2.flag = (self.r2.flag ^ (self.r2.flag & b))
+            self.r2.flag = self.r2.flag ^ (self.r2.flag & b)
         assert (self.r1.flag & b) == 0
 
     @property
@@ -61,10 +58,10 @@ class AlignedPair(object):
     @property
     def query_id(self):
         if self.r2 is None:
-                if self.r1.is_read2:
-                    return self.r1.query_name + '/2'
-                else:
-                    return self.r1.query_name + '/1'
+            if self.r1.is_read2:
+                return self.r1.query_name + '/2'
+            else:
+                return self.r1.query_name + '/1'
         else:
             return self.r1.query_name
 
@@ -75,9 +72,10 @@ class AlignedPair(object):
         else:
             blocks = self.r1.get_blocks() + self.r2.get_blocks()
             return merge_blocks(blocks, 1)
+
     @property
     def alnlen(self):
-        return sum(b[1]-b[0] for b in self.refblocks)
+        return sum(b[1] - b[0] for b in self.refblocks)
 
     @property
     def alnscore(self):

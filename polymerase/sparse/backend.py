@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -11,13 +9,15 @@
 Provides auto-detection of available acceleration libraries (Numba, MKL)
 and returns the appropriate sparse matrix class for the active backend.
 """
+
 import logging as lg
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class BackendInfo:
     """Information about the active compute backend."""
+
     name: str = 'cpu_stock'
     has_numba: bool = False
     has_mkl: bool = False
@@ -33,6 +33,7 @@ def _detect_numba():
     """Check if numba is available and functional."""
     try:
         import numba  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -47,13 +48,12 @@ def _detect_threadsafe_threading():
     """
     try:
         import numba
+
         layer = getattr(numba.config, 'THREADING_LAYER', 'default')
         # After JIT compilation, we can check the actual active layer
         # But before that, we check the configured preference
-        if layer in ('tbb', 'omp'):
-            return True
         # 'default' or 'workqueue' — not safe for concurrent access
-        return False
+        return layer in ('tbb', 'omp')
     except (ImportError, AttributeError):
         return False
 
@@ -62,6 +62,7 @@ def _detect_mkl():
     """Check if sparse_dot_mkl is available."""
     try:
         import sparse_dot_mkl  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -71,6 +72,7 @@ def _detect_cupy():
     """Check if CuPy is available with a working CUDA runtime."""
     try:
         import cupy as cp
+
         # Probe actual GPU availability
         cp.cuda.runtime.getDeviceCount()
         return True
@@ -93,12 +95,10 @@ def configure():
 
     if has_cupy:
         name = 'gpu'
-        lg.info('Backend: gpu (cupy=True, numba={}, mkl={})'.format(
-            has_numba, has_mkl))
+        lg.info(f'Backend: gpu (cupy=True, numba={has_numba}, mkl={has_mkl})')
     elif has_numba:
         name = 'cpu_optimized'
-        lg.info('Backend: cpu_optimized (numba={}, mkl={}, threadsafe={})'.format(
-            has_numba, has_mkl, threadsafe))
+        lg.info(f'Backend: cpu_optimized (numba={has_numba}, mkl={has_mkl}, threadsafe={threadsafe})')
     else:
         name = 'cpu_stock'
         lg.info('Backend: cpu_stock (scipy only)')
@@ -131,8 +131,10 @@ def get_sparse_class():
     if backend.name == 'cpu_optimized' and backend.has_numba:
         try:
             from .numba_matrix import CpuOptimizedCsrMatrix
+
             return CpuOptimizedCsrMatrix
         except ImportError:
             pass
     from .matrix import csr_matrix_plus
+
     return csr_matrix_plus
