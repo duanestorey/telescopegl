@@ -38,7 +38,8 @@ class NormalizeCofactor(Cofactor):
     def configure(self, opts, compute) -> None:
         self._compute = compute
 
-    def transform(self, primer_output_dir, output_dir, exp_tag, console=None) -> None:
+    def transform(self, primer_output_dir, output_dir, exp_tag, console=None,
+                  stopwatch=None) -> None:
         counts_file = os.path.join(primer_output_dir, '%s-TE_counts.tsv' % exp_tag)
         stats_file = os.path.join(primer_output_dir, '%s-run_stats.tsv' % exp_tag)
 

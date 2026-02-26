@@ -35,7 +35,7 @@ class AssignPrimer(Primer):
 
     @property
     def version(self) -> str:
-        return "2.0.0"
+        return "2.0.1"
 
     def configure(self, opts, compute) -> None:
         self._opts = opts
@@ -49,7 +49,7 @@ class AssignPrimer(Primer):
     def on_matrix_built(self, snapshot) -> None:
         self._alignment = snapshot
 
-    def commit(self, output_dir, exp_tag, console=None) -> None:
+    def commit(self, output_dir, exp_tag, console=None, stopwatch=None) -> None:
         from ...core.likelihood import PolymeraseLikelihood
         from ...core.reporter import output_report, update_sam
 
@@ -77,12 +77,16 @@ class AssignPrimer(Primer):
 
         # Run EM
         lg.info('Running Expectation-Maximization...')
+        if stopwatch:
+            stopwatch.start('EM')
         stime = time()
         if getattr(opts, 'parallel_blocks', False):
             ts_model.em_parallel(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
         else:
             ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
         _em_elapsed = time() - stime
+        if stopwatch:
+            stopwatch.stop()
         lg.info("EM completed in %s" % fmtmins(_em_elapsed))
 
         if console:
@@ -93,6 +97,8 @@ class AssignPrimer(Primer):
 
         # Generate report
         lg.info("Generating Report...")
+        if stopwatch:
+            stopwatch.start('Report')
         if console:
             console.detail('Generating report... done')
         stats_file = os.path.join(output_dir, '%s-run_stats.tsv' % exp_tag)
@@ -108,6 +114,8 @@ class AssignPrimer(Primer):
             stats_file,
             counts_file,
         )
+        if stopwatch:
+            stopwatch.stop()
 
         # Updated SAM (if requested and tmp_bam is available)
         if getattr(opts, 'updated_sam', False):

@@ -83,10 +83,11 @@ complete pipeline runs under 60 seconds.
 
 ```
 polymerase/
-├── __init__.py                          # Package init, __version__ = "2.0.0"
+├── __init__.py                          # Package init, __version__ = "2.0.1"
 ├── __main__.py                          # Entry point: assign, resume, test, list-plugins, install
 ├── cli/
 │   ├── __init__.py                      # SubcommandOptions, configure_logging(), _SAFE_TYPES
+│   ├── console.py                       # Console (pretty stdout), Stopwatch (timing collector)
 │   ├── assign.py                        # assign subcommand (thin platform orchestrator)
 │   ├── resume.py                        # resume subcommand (loads checkpoint, delegates to registry)
 │   └── plugins.py                       # list-plugins and install subcommands
@@ -180,7 +181,7 @@ class MyPrimer(Primer):
         self._matrix = snapshot.raw_scores
         self._feat_index = snapshot.feat_index
 
-    def commit(self, output_dir, exp_tag):
+    def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
         # Your analysis here, using self.ops for math
         result = self.ops.dot(self._matrix, weights)
         # Write output files to output_dir
@@ -200,7 +201,8 @@ class MyCofactor(Cofactor):
     @property
     def primer_name(self): return "assign"  # which primer to post-process
 
-    def transform(self, primer_output_dir, output_dir, exp_tag):
+    def transform(self, primer_output_dir, output_dir, exp_tag, console=None,
+                  stopwatch=None):
         # Read primer output from primer_output_dir
         # Write transformed output to output_dir
 ```

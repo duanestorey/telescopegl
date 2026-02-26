@@ -21,6 +21,7 @@ import shutil
 import numpy as np
 
 from . import SubcommandOptions, configure_logging
+from .console import Stopwatch
 from ..utils.helpers import format_minutes as fmtmins
 from ..core.model import Polymerase, scPolymerase
 
@@ -466,22 +467,27 @@ def run(args, sc=True):
     console.blank()
 
     # --- Platform: Load Data ---
+    sw = Stopwatch()
     ts = scPolymerase(opts) if sc else Polymerase(opts)
 
     Annotation = get_annotation_class(opts.annotation_class)
     lg.info('Loading annotation...')
+    sw.start('Annotation')
     stime = time()
     annot = Annotation(opts.gtffile, opts.attribute, opts.stranded_mode)
     _annot_elapsed = time() - stime
+    sw.stop()
     lg.info("Loaded annotation in {}".format(fmtmins(_annot_elapsed)))
     lg.info('Loaded {} features.'.format(len(annot.loci)))
     console.verbose('Loaded annotation: {:,} features ({:.1f}s)'.format(
         len(annot.loci), _annot_elapsed))
 
     lg.info('Loading alignments...')
+    sw.start('Alignment')
     stime = time()
     ts.load_alignment(annot)
     _aln_elapsed = time() - stime
+    sw.stop()
     lg.info("Loaded alignment in {}".format(fmtmins(_aln_elapsed)))
 
     ts.print_summary(lg.INFO)
@@ -514,6 +520,7 @@ def run(args, sc=True):
     annot = None  # free memory
     lg.debug('garbage: {:d}'.format(gc.collect()))
 
+    os.makedirs(opts.outdir, exist_ok=True)
     ts.save(opts.outfile_path('checkpoint'))
 
     alignment_snapshot = AlignmentSnapshot(
@@ -549,7 +556,8 @@ def run(args, sc=True):
 
     registry.notify('on_annotation_loaded', annot_snapshot)
     registry.notify('on_matrix_built', alignment_snapshot)
-    registry.commit_all(opts.outdir, opts.exp_tag, console=console)
+    registry.commit_all(opts.outdir, opts.exp_tag, console=console,
+                        stopwatch=sw)
 
     # Output file summary
     _output_files = _collect_output_files(opts.outdir)
@@ -559,6 +567,10 @@ def run(args, sc=True):
             len(_output_files), opts.outdir + '/'))
         for f in _output_files:
             console.output_file(f)
+
+    # Timing summary
+    console.blank()
+    console.timing_table(sw)
 
     # Completion
     console.blank()

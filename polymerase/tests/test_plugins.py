@@ -35,7 +35,7 @@ class TestPrimerABC:
             @property
             def name(self):
                 return "test"
-            def commit(self, output_dir, exp_tag, console=None):
+            def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
         p = MyPrimer()
         assert p.name == "test"
@@ -47,7 +47,7 @@ class TestPrimerABC:
             @property
             def name(self):
                 return "minimal"
-            def commit(self, output_dir, exp_tag, console=None):
+            def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
         p = MinimalPrimer()
         # Should not raise
@@ -68,7 +68,7 @@ class TestCofactorABC:
             @property
             def primer_name(self):
                 return "test"
-            def transform(self, primer_output_dir, output_dir, exp_tag, console=None):
+            def transform(self, primer_output_dir, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
         c = MyCofactor()
         assert c.name == "test-cof"
@@ -159,7 +159,7 @@ class TestRegistry:
                 return "spy"
             def on_matrix_built(self, snapshot):
                 received.append(snapshot)
-            def commit(self, output_dir, exp_tag, console=None):
+            def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
 
         reg = PluginRegistry()
@@ -176,7 +176,7 @@ class TestRegistry:
             def configure(self, opts, compute):
                 self.received_opts = opts
                 self.received_compute = compute
-            def commit(self, output_dir, exp_tag, console=None):
+            def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
 
         p = ReceiverPrimer()
@@ -192,7 +192,7 @@ class TestRegistry:
             @property
             def name(self):
                 return "fail"
-            def commit(self, output_dir, exp_tag, console=None):
+            def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 raise RuntimeError("intentional failure")
 
         reg = PluginRegistry()
@@ -211,7 +211,7 @@ class TestAssignPrimer:
         from polymerase.plugins.builtin.assign import AssignPrimer
         p = AssignPrimer()
         assert p.name == "assign"
-        assert p.version == "2.0.0"
+        assert p.version == "2.0.1"
 
     def test_assign_primer_produces_output(self):
         """Run assign primer on test data, verify output files."""

@@ -4,6 +4,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.1](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-26
+
+### Added
+
+- **Benchmark timing table**: A timing summary is displayed at the end of every
+  `assign` and `resume` run, showing per-stage elapsed time and percentage.
+  Verbose mode (`--verbose`) adds cofactor sub-stage detail. Implemented via the
+  `Stopwatch` class and `Console.timing_table()` in `cli/console.py`.
+
+- **`stopwatch` parameter on plugin ABCs**: `Primer.commit()` and
+  `Cofactor.transform()` accept an optional `stopwatch` kwarg, allowing the
+  platform to collect fine-grained timing from plugins without coupling.
+
+### Fixed
+
+- **`--outdir` auto-creation**: The pipeline now creates the output directory
+  if it doesn't exist, instead of crashing with `FileNotFoundError` when
+  saving the checkpoint. Fixed in both `assign` and `resume` subcommands.
+
+---
+
 ## [2.0.0](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-26
 
 ### Added

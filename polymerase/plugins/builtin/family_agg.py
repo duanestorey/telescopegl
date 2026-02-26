@@ -80,7 +80,8 @@ class FamilyAggCofactor(Cofactor):
         self._gtf_path = getattr(opts, 'gtffile', None)
         self._attribute = getattr(opts, 'attribute', 'locus')
 
-    def transform(self, primer_output_dir, output_dir, exp_tag, console=None) -> None:
+    def transform(self, primer_output_dir, output_dir, exp_tag, console=None,
+                  stopwatch=None) -> None:
         # Find assign counts file
         counts_file = os.path.join(primer_output_dir, '%s-TE_counts.tsv' % exp_tag)
         if not os.path.exists(counts_file):
