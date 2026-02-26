@@ -1,0 +1,98 @@
+{
+  "backend": "stock_cpu_scipy",
+  "repeat": 3,
+  "versions": {
+    "python": "3.13.5",
+    "numpy": "2.2.6",
+    "scipy": "1.17.1"
+  },
+  "annotation": {
+    "stage": "annotation_load",
+    "times": [
+      0.00420095887966454,
+      0.004163915989920497,
+      0.002929291920736432
+    ],
+    "mean_s": 0.0037647222634404898,
+    "std_s": 0.0005909319966815763,
+    "n_loci": 99,
+    "n_chroms": 28,
+    "n_intervals": 308
+  },
+  "bam_load": {
+    "stage": "bam_load_and_matrix",
+    "times": [
+      0.42000029189512134,
+      0.4110126669984311,
+      0.4268808339256793
+    ],
+    "mean_s": 0.41929793093974393,
+    "std_s": 0.006497161615735635,
+    "matrix_shape": [
+      1000,
+      59
+    ],
+    "nnz": 18471,
+    "density": 0.3130677966101695
+  },
+  "em": {
+    "stage": "em_algorithm",
+    "times_init": [
+      0.0026660419534891844,
+      0.00041508302092552185,
+      0.0004318340215831995
+    ],
+    "times_em": [
+      0.038323292043060064,
+      0.039865541039034724,
+      0.04076462495140731
+    ],
+    "mean_init_s": 0.001170986331999302,
+    "mean_em_s": 0.039651152677834034,
+    "std_init_s": 0.0010571860865893424,
+    "std_em_s": 0.001008133049885959,
+    "log_likelihood": 95252.59661442068,
+    "N": 1000,
+    "K": 59
+  },
+  "estep_mstep": {
+    "stage": "estep_mstep_detail",
+    "n_iterations": 10,
+    "estep_mean_ms": 0.7115206681191921,
+    "estep_std_ms": 0.019964211552988966,
+    "mstep_mean_ms": 0.19756238907575607,
+    "mstep_std_ms": 0.0016551694677392698,
+    "lnl_mean_ms": 0.6738539086654782,
+    "lnl_std_ms": 0.016864957951571502
+  },
+  "reassignment": {
+    "stage": "reassignment",
+    "exclude_mean_ms": 0.8483333513140678,
+    "exclude_std_ms": 0.03796243367649961,
+    "choose_mean_ms": 0.8336803875863552,
+    "choose_std_ms": 0.011726895599121474,
+    "average_mean_ms": 0.8215416843692461,
+    "average_std_ms": 0.009271201923766402,
+    "conf_mean_ms": 1.4204167140026887,
+    "conf_std_ms": 0.0027465201327256184,
+    "unique_mean_ms": 1.6216665195922058,
+    "unique_std_ms": 0.4164254199133268,
+    "all_mean_ms": 1.1696802296986182,
+    "all_std_ms": 0.007316356526583894
+  },
+  "sparse_ops": {
+    "stage": "sparse_ops",
+    "scale_mean_us": 22.83915877342224,
+    "norm1_mean_us": 146.09749894589186,
+    "expm1_mean_us": 43.37250022217631,
+    "multiply_scalar_mean_us": 16.831671819090843,
+    "multiply_vector_mean_us": 51.98374856263399,
+    "binmax_mean_us": 707.0570811629295
+  },
+  "memory": {
+    "stage": "memory_mb",
+    "after_bam_load": 7.647826194763184,
+    "after_em_init": 7.647826194763184,
+    "after_em_converge": 7.647826194763184
+  }
+}

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-from __future__ import absolute_import
-from past.utils import old_div
+"""Telescope pipeline: BAM loading, matrix construction, and orchestration.
 
+TelescopeLikelihood (EM algorithm) is in likelihood.py.
+Report generation helpers are in reporter.py.
+Both are re-exported here for backward compatibility.
+"""
 import sys
 import os
 import logging as lg
 from collections import OrderedDict, defaultdict, Counter
-import gc
 from multiprocessing import Pool
 import functools
 
@@ -22,6 +23,11 @@ from .helpers import str2int, region_iter, phred
 
 from . import alignment
 from . import BIG_INT
+
+# Re-export for backward compatibility
+from .likelihood import TelescopeLikelihood
+from .reporter import output_report as _output_report_func
+from .reporter import update_sam as _update_sam_func
 
 __author__ = 'Matthew L. Bendall'
 __copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
@@ -72,9 +78,8 @@ def _print_progress(nfrags, infolev=2500000):
          lg.debug(msg)
 
 class Telescope(object):
-    """
+    """BAM loading, sparse matrix construction, and pipeline orchestration."""
 
-    """
     def __init__(self, opts):
 
         self.opts = opts               # Command line options
@@ -183,6 +188,7 @@ class Telescope(object):
             'no_feature_key': self.opts.no_feature_key,
             'overlap_mode': self.opts.overlap_mode,
             'overlap_threshold': self.opts.overlap_threshold,
+            'stranded_mode': self.opts.stranded_mode,
             'tempdir': self.opts.tempdir
         }
         _minAS, _maxAS = BIG_INT, -BIG_INT
@@ -207,7 +213,7 @@ class Telescope(object):
 
     def _mapping_fromfiles(self, files):
         for f in files:
-            lines = (l.strip('\n').split('\t') for l in open(f, 'rU'))
+            lines = (l.strip('\n').split('\t') for l in open(f, 'r'))
             for code, rid, fid, ascr, alen in lines:
                 yield (int(code), rid, fid, int(ascr), int(alen))
 
@@ -217,7 +223,7 @@ class Telescope(object):
         _omode, _othresh = self.opts.overlap_mode, self.opts.overlap_threshold
 
         _mappings = []
-        assign = Assigner(annotation, _nfkey, _omode, _othresh, self.opts).assign_func()
+        assign = Assigner(annotation, _nfkey, _omode, _othresh, self.opts.stranded_mode).assign_func()
 
         """ Load unsorted reads """
         alninfo = Counter()
@@ -281,7 +287,6 @@ class Telescope(object):
             bam_u.close()
             bam_t.close()
 
-        # lg.info('Alignment Info: {}'.format(alninfo))
         return _mappings, (_minAS, _maxAS), alninfo
 
     def _mapping_to_matrix(self, miter, scorerange, alninfo):
@@ -319,7 +324,7 @@ class Telescope(object):
         if _isparallel:
             # Default for nunmap_idx is zero
             unmap_both = self.run_info.get('nunmap_idx', 0) - alninfo['unmap_x']
-            alninfo['unmapped'] = old_div(unmap_both, 2)
+            alninfo['unmapped'] = unmap_both // 2
             for cs, desc in alignment.CODES:
                 ci = alignment.CODE_INT[cs]
                 if cs not in alninfo and ci in rcodes:
@@ -335,8 +340,6 @@ class Telescope(object):
             alninfo['unmapped'] = alninfo['SU'] + alninfo['PU']
             alninfo['unique'] = alninfo['nofeat_U'] + alninfo['feat_U']
             alninfo['ambig'] = alninfo['nofeat_A'] + alninfo['feat_A']
-            # alninfo['overlap_unique'] = alninfo['feat_U']
-            # alninfo['overlap_ambig'] = alninfo['feat_A']
 
         ''' Tweak alninfo '''
         for cs,desc in alignment.CODES:
@@ -361,164 +364,13 @@ class Telescope(object):
         alninfo['overlap_unique'] = np.sum(self.raw_scores.count(1) == 1)
         alninfo['overlap_ambig'] = self.shape[0] - alninfo['overlap_unique']
 
-
-    """
-    def load_mappings(self, samfile_path):
-        _mappings = []
-        with pysam.AlignmentFile(samfile_path) as sf:
-            for pairs in alignment.fetch_fragments(sf, until_eof=True):
-                for pair in pairs:
-                    if pair.r1.has_tag('ZT') and pair.r1.get_tag('ZT') == 'SEC':
-                        continue
-                    _mappings.append((
-                        pair.query_id,
-                        pair.r1.get_tag('ZF'),
-                        pair.alnscore,
-                        pair.alnlen
-                    ))
-                    if len(_mappings) % 500000 == 0:
-                        lg.info('...loaded {:.1f}M mappings'.format(
-                            len(_mappings) / 1e6))
-        return _mappings
-    """
-
-
-
-    """
-    def _mapping_to_matrix(self, mappings):
-        ''' '''
-        _maxAS = max(t[2] for t in mappings)
-        _minAS = min(t[2] for t in mappings)
-        lg.debug('max alignment score: {}'.format(_maxAS))
-        lg.debug('min alignment score: {}'.format(_minAS))
-
-        # Rescale integer alignment score to be greater than zero
-        rescale = {s: (s - _minAS + 1) for s in range(_minAS, _maxAS + 1)}
-
-        # Construct dok matrix with mappings
-        if 'annotated_features' in self.run_info:
-            ncol = self.run_info['annotated_features']
-        else:
-            ncol = len(set(t[1] for t in mappings))
-        dim = (len(mappings), ncol)
-        _m1 = scipy.sparse.dok_matrix(dim, dtype=np.uint16)
-        _ridx = self.read_index
-        _fidx = self.feat_index
-        for rid, fid, ascr, alen in mappings:
-            i = _ridx.setdefault(rid, len(_ridx))
-            j = _fidx.setdefault(fid, len(_fidx))
-            _m1[i, j] = max(_m1[i, j], (rescale[ascr] + alen))
-
-        # Trim matrix to size
-        _m1 = _m1[:len(_ridx), :len(_fidx)]
-
-        # Convert dok matrix to csr
-        self.raw_scores = csr_matrix(_m1)
-        self.shape = (len(_ridx), len(_fidx))
-    """
-
     def output_report(self, tl, stats_filename, counts_filename):
-        _rmethod, _rprob = self.opts.reassign_mode, self.opts.conf_prob
-        _fnames = sorted(self.feat_index, key=self.feat_index.get)
-        _flens = self.feature_length
-        _stats_rounding = pd.Series([2, 3, 2, 3],
-                                    index = ['final_conf',
-                                             'final_prop',
-                                             'init_best_avg',
-                                             'init_prop']
-                                    )
-
-        # Report information for run statistics
-        _stats_report0 = {
-            'transcript': _fnames,                                          # transcript
-            'transcript_length': [_flens[f] for f in _fnames],              # tx_len
-            'final_conf': tl.reassign('conf', _rprob).sum(0).A1,            # final_conf
-            'final_prop': tl.pi,                                            # final_prop
-            'init_aligned': tl.reassign('all', initial=True).sum(0).A1,     # init_aligned
-            'unique_count': tl.reassign('unique').sum(0).A1,                # unique_count
-            'init_best': tl.reassign('exclude', initial=True).sum(0).A1,    # init_best
-            'init_best_random': tl.reassign('choose', initial=True).sum(0).A1,  # init_best_random
-            'init_best_avg': tl.reassign('average', initial=True).sum(0).A1,    # init_best_avg
-            'init_prop': tl.pi_init                                             # init_prop
-        }
-
-        # Convert report into data frame
-        _stats_report = pd.DataFrame(_stats_report0)
-
-        # Sort the report by transcript proportion
-        _stats_report.sort_values('final_prop', ascending = False, inplace = True)
-
-        # Round decimal values
-        _stats_report = _stats_report.round(_stats_rounding)
-
-        # Report information for transcript counts
-        _counts0 = {
-            'transcript': _fnames,  # transcript
-            'count': tl.reassign(_rmethod, _rprob).sum(0).A1 # final_count
-        }
-
-        # Rotate the report
-        _counts = pd.DataFrame(_counts0)
-
-        # Sort the report
-        _counts.sort_values('transcript', inplace = True)
-
-        # Run info line
-        _comment = ["## RunInfo", ]
-        _comment += ['{}:{}'.format(*tup) for tup in self.run_info.items()]
-
-        with open(stats_filename, 'w') as outh:
-            outh.write('\t'.join(_comment))
-            _stats_report.to_csv(outh, sep = '\t', index = False)
-
-        with open(counts_filename, 'w') as outh:
-            _counts.to_csv(outh, sep = '\t', index = False)
-
-        return
+        """Generate TSV reports. Delegates to reporter.output_report()."""
+        return _output_report_func(self, tl, stats_filename, counts_filename)
 
     def update_sam(self, tl, filename):
-        _rmethod, _rprob = self.opts.reassign_mode, self.opts.conf_prob
-        _fnames = sorted(self.feat_index, key=self.feat_index.get)
-
-        mat = csr_matrix(tl.reassign(_rmethod, _rprob))
-        # best_feats = {i: _fnames for i, j in zip(*mat.nonzero())}
-
-        with pysam.AlignmentFile(self.tmp_bam, check_sq=False) as sf:
-            header = sf.header
-            header['PG'].append({
-                'PN': 'telescope', 'ID': 'telescope',
-                'VN': self.run_info['version'],
-                'CL': ' '.join(sys.argv),
-            })
-            outsam = pysam.AlignmentFile(filename, 'wb', header=header)
-            for code, pairs in alignment.fetch_fragments_seq(sf, until_eof=True):
-                if len(pairs) == 0: continue
-                ridx = self.read_index[pairs[0].query_id]
-                for aln in pairs:
-                    if aln.is_unmapped:
-                        aln.write(outsam)
-                        continue
-                    assert aln.r1.has_tag('ZT'), 'Missing ZT tag'
-                    if aln.r1.get_tag('ZT') == 'SEC':
-                        aln.set_flag(pysam.FSECONDARY)
-                        aln.set_tag('YC', c2str((248, 248, 248)))
-                        aln.set_mapq(0)
-                    else:
-                        fidx = self.feat_index[aln.r1.get_tag('ZF')]
-                        prob = tl.z[ridx, fidx]
-                        aln.set_mapq(phred(prob))
-                        aln.set_tag('XP', int(round(prob*100)))
-                        if mat[ridx, fidx] > 0:
-                            aln.unset_flag(pysam.FSECONDARY)
-                            aln.set_tag('YC',c2str(D2PAL['vermilion']))
-                        else:
-                            aln.set_flag(pysam.FSECONDARY)
-                            if prob >= 0.2:
-                                aln.set_tag('YC', c2str(D2PAL['yellow']))
-                            else:
-                                aln.set_tag('YC', c2str(GPAL[2]))
-                    aln.write(outsam)
-            outsam.close()
+        """Update SAM file. Delegates to reporter.update_sam()."""
+        return _update_sam_func(self, tl, filename)
 
     def print_summary(self, loglev=lg.WARNING):
         _d = Counter()
@@ -553,7 +405,7 @@ class Telescope(object):
         lg.log(loglev, '        {} map to multiple loci.'.format(
             _d['overlap_ambig']))
         lg.log(loglev, '\n')
-    
+
     def __str__(self):
         if hasattr(self.opts, 'samfile'):
             return '<Telescope samfile=%s, gtffile=%s>'.format(
@@ -569,8 +421,8 @@ class scTelescope(Telescope):
     def __init__(self, opts):
         super().__init__(opts)
         self.single_cell = True
-        self.read_barcodes = {}  # Dictionary for storing fragment names mapped to barcodes
-        self.barcode_read_indices = defaultdict(list)  # Dictionary for storing cell barcodes mapped to assignment matrix indices
+        self.read_barcodes = {}
+        self.barcode_read_indices = defaultdict(list)
 
     def output_report(self, tl, stats_filename, counts_filename):
         _rmethod, _rprob = self.opts.reassign_mode, self.opts.conf_prob
@@ -583,32 +435,24 @@ class scTelescope(Telescope):
                                            'init_prop']
                                     )
 
-        # Report information for run statistics
         _stats_report0 = {
-            'transcript': _fnames,  # transcript
-            'transcript_length': [_flens[f] for f in _fnames],  # tx_len
-            'final_prop': tl.pi,  # final_prop
-            'init_prop': tl.pi_init  # init_prop
+            'transcript': _fnames,
+            'transcript_length': [_flens[f] for f in _fnames],
+            'final_prop': tl.pi,
+            'init_prop': tl.pi_init,
         }
 
-        # Convert report into data frame
         _stats_report = pd.DataFrame(_stats_report0)
-
-        # Sort the report by transcript proportion
         _stats_report.sort_values('final_prop', ascending=False, inplace=True)
-
-        # Round decimal values
         _stats_report = _stats_report.round(_stats_rounding)
 
-        # Run info line
-        _comment = ["## RunInfo", ]
+        _comment = ["## RunInfo"]
         _comment += ['{}:{}'.format(*tup) for tup in self.run_info.items()]
 
         with open(stats_filename, 'w') as outh:
             outh.write('\t'.join(_comment) + '\n')
             _stats_report.to_csv(outh, sep='\t', index=False)
 
-        ''' Aggregate fragment assignments by cell using each of the 6 assignment methdods'''
         _methods = ['conf', 'all', 'unique', 'exclude', 'choose', 'average']
         _bcidx = {bcode: rows for bcode, rows in self.barcode_read_indices.items() if len(rows) > 0}
         _bcodes = [_bcode for _bcode, _rows in _bcidx.items()]
@@ -624,268 +468,34 @@ class scTelescope(Telescope):
             for i, (_bcode, _rows) in enumerate(_bcidx.items()):
                 _cell_count_matrix[i, :] = _assignments[_rows, :].sum(0).A1
             _cell_count_df = pd.DataFrame(_cell_count_matrix.todense(),
-                                          columns = _fnames,
-                                          index = _bcodes)
-            _cell_count_df.to_csv(counts_outfile, sep = '\t')
+                                          columns=_fnames,
+                                          index=_bcodes)
+            _cell_count_df.to_csv(counts_outfile, sep='\t')
 
-class TelescopeLikelihood(object):
-    """
-
-    """
-    def __init__(self, score_matrix, opts):
-        """
-        """
-        # Raw scores
-        self.raw_scores = score_matrix
-        self.max_score = self.raw_scores.max()
-
-        # N fragments x K transcripts
-        self.N, self.K = self.raw_scores.shape
-
-        # Q[i,] is the set of mapping qualities for fragment i, where Q[i,j]
-        # represents the evidence for fragment i being generated by fragment j.
-        # In this case the evidence is represented by an alignment score, which
-        # is greater when there are more matches and is penalized for
-        # mismatches
-        # Scale the raw alignment score by the maximum alignment score
-        # and multiply by a scale factor.
-        self.scale_factor = 100.
-        self.Q = self.raw_scores.scale().multiply(self.scale_factor).expm1()
-
-        # z[i,] is the partial assignment weights for fragment i, where z[i,j]
-        # is the expected value for fragment i originating from transcript j. The
-        # initial estimate is the normalized mapping qualities:
-        # z_init[i,] = Q[i,] / sum(Q[i,])
-        self.z = None # self.Q.norm(1)
-
-        self.epsilon = opts.em_epsilon
-        self.max_iter = opts.max_iter
-
-        # pi[j] is the proportion of fragments that originate from
-        # transcript j. Initial value assumes that all transcripts contribute
-        # equal proportions of fragments
-        self.pi = np.repeat(1./self.K, self.K)
-        self.pi_init = None
-
-        # theta[j] is the proportion of non-unique fragments that need to be
-        # reassigned to transcript j. Initial value assumes that all transcripts
-        # are reassigned an equal proportion of fragments
-        self.theta = np.repeat(1./self.K, self.K)
-        self.theta_init = None
-
-        # Y[i] is the ambiguity indicator for fragment i, where Y[i]=1 if
-        # fragment i is aligned to multiple transcripts and Y[i]=0 otherwise.
-        # Store as N x 1 matrix
-        self.Y = (self.Q.count(1) > 1).astype(np.uint8)
-        self._yslice = self.Y[:,0].nonzero()[0]
-
-        # Log-likelihood score
-        self.lnl = float('inf')
-
-        # Prior values
-        self.pi_prior = opts.pi_prior
-        self.theta_prior = opts.theta_prior
-
-        # Precalculated values
-        self._weights = self.Q.max(1)             # Weight assigned to each fragment
-        self._total_wt = self._weights.sum()      # Total weight
-        self._ambig_wt = self._weights.multiply(self.Y).sum() # Weight of ambig frags
-        self._unique_wt = self._weights.multiply(1-self.Y).sum()
-
-        # Weighted prior values
-        self._pi_prior_wt = self.pi_prior * self._weights.max()
-        self._theta_prior_wt = self.theta_prior * self._weights.max()
-        #
-        self._pisum0 = self.Q.multiply(1-self.Y).sum(0)
-        lg.debug('done initializing model')
-
-    def estep(self, pi, theta):
-        """ Calculate the expected values of z
-                E(z[i,j]) = ( pi[j] * theta[j]**Y[i] * Q[i,j] ) /
-        """
-        lg.debug('started e-step')
-
-        # New way:
-        # _n = self.Q.copy()
-        # _rowiter = zip(_n.indptr[:-1], _n.indptr[1:], self.Y[:, 0])
-        # for d_start, d_end, indicator in _rowiter:
-        #     _cidx = _n.indices[d_start:d_end]
-        #     if indicator == 1:
-        #         _n.data[d_start:d_end] *= (pi[_cidx] * theta[_cidx])
-        #     else:
-        #         _n.data[d_start:d_end] *= pi[_cidx]
-        # Newer way
-        _amb = csr_matrix(self.Q.multiply(self.Y)).multiply(pi * theta)
-        _uni = csr_matrix(self.Q.multiply(1 - self.Y)).multiply(pi)
-        _n = csr_matrix(_amb + _uni)
-
-        return _n.norm(1)
-
-    def mstep(self, z):
-        """ Calculate the maximum a posteriori (MAP) estimates for pi and theta
-
-        """
-        lg.debug('started m-step')
-        # The expected values of z weighted by mapping score
-        _weighted = z.multiply(self._weights)
-
-        # Estimate theta_hat
-        _thetasum = _weighted.multiply(self.Y).sum(0)
-        _theta_denom = self._ambig_wt + self._theta_prior_wt * self.K
-        _theta_hat = (_thetasum + self._theta_prior_wt) / _theta_denom
-
-        # Estimate pi_hat
-        _pisum = self._pisum0 + _thetasum
-        _pi_denom = self._total_wt + self._pi_prior_wt * self.K
-        _pi_hat = (_pisum + self._pi_prior_wt) / _pi_denom
-
-        return _pi_hat.A1, _theta_hat.A1
-
-    def calculate_lnl(self, z, pi, theta):
-        lg.debug('started lnl')
-        # _inner = self.Q.copy()
-        # _rowiter = zip(_inner.indptr[:-1], _inner.indptr[1:], self.Y[:, 0])
-        # for d_start, d_end, indicator in _rowiter:
-        #     _cidx =  _inner.indices[d_start:d_end]
-        #     if indicator == 1:
-        #         _inner.data[d_start:d_end] *= (pi[_cidx] * theta[_cidx])
-        #     else:
-        #         _inner.data[d_start:d_end] *= pi[_cidx]
-        #
-        _amb = csr_matrix(self.Q.multiply(self.Y)).multiply(pi * theta)
-        _uni = csr_matrix(self.Q.multiply(1 - self.Y)).multiply(pi)
-        _inner = csr_matrix(_amb + _uni)
-        cur = z.multiply(_inner.log1p()).sum()
-        lg.debug('completed lnl')
-        return cur
-
-    def em(self, use_likelihood=False, loglev=lg.WARNING, save_memory=True):
-        inum = 0               # Iteration number
-        converged = False      # Has convergence been reached?
-        reached_max = False    # Has max number of iterations been reached?
-
-        msgD = 'Iteration {:d}, diff={:.5g}'
-        msgL = 'Iteration {:d}, lnl= {:.5e}, diff={:.5g}'
-        from time import perf_counter
-        from .helpers import format_minutes as fmtmins
-        while not (converged or reached_max):
-            xtime = perf_counter()
-            _z = self.estep(self.pi, self.theta)
-            _pi, _theta = self.mstep(_z)
-            inum += 1
-            if inum == 1:
-                self.pi_init = _pi
-                self.theta_init = _theta
-
-            ''' Calculate absolute difference between estimates '''
-            diff_est = abs(_pi - self.pi).sum()
-
-            if use_likelihood:
-                ''' Calculate likelihood '''
-                _lnl = self.calculate_lnl(_z, _pi, _theta)
-                diff_lnl = abs(_lnl - self.lnl)
-                lg.log(loglev, msgL.format(inum, _lnl, diff_est))
-                converged = diff_lnl < self.epsilon
-                self.lnl = _lnl
-            else:
-                lg.log(loglev, msgD.format(inum, diff_est))
-                converged = diff_est < self.epsilon
-
-            reached_max = inum >= self.max_iter
-            self.z = _z
-            self.pi, self.theta = _pi, _theta
-            lg.debug("time: {}".format(perf_counter()-xtime))
-
-        _con = 'converged' if converged else 'terminated'
-        if not use_likelihood:
-            self.lnl = self.calculate_lnl(self.z, self.pi, self.theta)
-
-
-        lg.log(loglev, 'EM {:s} after {:d} iterations.'.format(_con, inum))
-        lg.log(loglev, 'Final log-likelihood: {:f}.'.format(self.lnl))
-        return
-
-    def reassign(self, method, thresh=0.9, initial=False):
-        """ Reassign fragments to expected transcripts
-
-        Running EM finds the expected fragment assignment weights at the MAP
-        estimates of pi and theta. This function reassigns all fragments based
-        on these assignment weights. A simple heuristic is to assign each
-        fragment to the transcript with the highest assignment weight.
-
-        In practice, not all fragments have exactly one best hit. The "method"
-        argument defines how we deal with fragments that are not fully resolved
-        after EM:
-                exclude - reads with > 1 best hits are excluded
-                choose  - one of the best hits is randomly chosen
-                average - read is evenly divided among best hits
-                conf    - only confident reads are reassigned
-                unique  - only uniquely aligned reads
-                all     - assigns reads to all aligned loci
-        Args:
-            method:
-            thresh:
-            iteration:
-
-        Returns:
-            matrix where m[i,j] == 1 iff read i is reassigned to transcript j
-
-        """
-        if method not in ['exclude', 'choose', 'average', 'conf', 'unique', 'all']:
-            raise ValueError('Argument "method" should be one of (exclude, choose, average, conf, unique, all)')
-
-        _z = self.Q.norm(1) if initial else self.z
-
-        if method == 'exclude':
-            # Identify best hit(s), then exclude rows with >1 best hits
-            v = _z.binmax(1)
-            assignments = v.multiply(v.sum(1) == 1)
-        elif method == 'choose':
-            # Identify best hit(s), then randomly choose reassignment
-            v = _z.binmax(1)
-            assignments = v.choose_random(1)
-        elif method == 'average':
-            # Identify best hit(s), then divide by row sum
-            v = _z.binmax(1)
-            assignments = v.norm(1)
-        elif method == 'conf':
-            # Zero out all values less than threshold
-            # If thresh > 0.5 then at most
-            v = _z.apply_func(lambda x: x if x >= thresh else 0)
-            # Average each row so each sums to 1.
-            assignments = v.norm(1)
-        elif method == 'unique':
-            # Zero all rows that are ambiguous
-            assignments = _z.multiply(1 - self.Y).ceil().astype(np.uint8)
-        elif method == 'all':
-            # Return all nonzero elements
-            assignments = _z.apply_func(lambda x: 1 if x > 0 else 0).astype(np.uint8)
-
-        assignments = csr_matrix(assignments)
-        return assignments
 
 class Assigner:
     def __init__(self, annotation,
-                 no_feature_key, overlap_mode, overlap_threshold, opts):
+                 no_feature_key, overlap_mode, overlap_threshold,
+                 stranded_mode=None):
         self.annotation = annotation
         self.no_feature_key = no_feature_key
         self.overlap_mode = overlap_mode
         self.overlap_threshold = overlap_threshold
-        self.opts = opts
+        self.stranded_mode = stranded_mode
 
     def assign_func(self):
         def _assign_pair_threshold(pair):
             blocks = pair.refblocks
             if pair.r1_is_reversed:
                 if pair.is_paired:
-                    frag_strand = '+' if self.opts.stranded_mode[-1] == 'F' else '-'
+                    frag_strand = '+' if self.stranded_mode[-1] == 'F' else '-'
                 else:
-                    frag_strand = '-' if self.opts.stranded_mode[0] == 'F' else '+'
+                    frag_strand = '-' if self.stranded_mode[0] == 'F' else '+'
             else:
                 if pair.is_paired:
-                    frag_strand = '-' if self.opts.stranded_mode[-1] == 'F' else '+'
+                    frag_strand = '-' if self.stranded_mode[-1] == 'F' else '+'
                 else:
-                    frag_strand = '+' if self.opts.stranded_mode[0] == 'F' else '-'
+                    frag_strand = '+' if self.stranded_mode[0] == 'F' else '-'
             f = self.annotation.intersect_blocks(pair.ref_name, blocks, frag_strand)
             if not f:
                 return self.no_feature_key
@@ -902,7 +512,6 @@ class Assigner:
         def _assign_pair_union(pair):
             pass
 
-        ''' Return function depending on overlap mode '''
         if self.overlap_mode == 'threshold':
             return _assign_pair_threshold
         elif self.overlap_mode == 'intersection-strict':
@@ -911,4 +520,3 @@ class Assigner:
             return _assign_pair_union
         else:
             assert False
-

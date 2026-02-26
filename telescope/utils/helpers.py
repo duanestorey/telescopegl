@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """ Helper functions
 """
-from __future__ import division
+import re
 
-from past.utils import old_div
 import numpy as np
 from itertools import zip_longest
 
@@ -62,11 +61,11 @@ def eprob(Q):
         >>> eprob(ord('@')-33)
         0.9992056717652757
     """
-    return 1 - (10**(old_div(float(Q), -10)))
+    return 1 - (10**(float(Q) / -10))
 
 
 def format_minutes(seconds):
-    mins = old_div(seconds, 60)
+    mins = seconds // 60
     secs = seconds % 60
     return '%d minutes and %d secs' % (mins,secs)
 
@@ -108,7 +107,7 @@ class GenomeRegion:
     """
     def __init__(self, chrom=None, start=None, end=None, region=None):
         if region is not None:
-            m = re.match('(\w+):(\d+)-(\d+)', region)
+            m = re.match(r'(\w+):(\d+)-(\d+)', region)
             self.chrom = m.group(1)
             self.start, self.end = int(m.group(2)), int(m.group(3))
         else:

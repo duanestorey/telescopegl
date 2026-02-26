@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import object
-
 import re
 from collections import defaultdict, namedtuple, Counter, OrderedDict
 import logging as lg
@@ -31,15 +27,15 @@ class _AnnotationIntervalTree(object):
         self.loci = OrderedDict()
         self.key = attribute_name
         self.itree = defaultdict(IntervalTree)
-        self.run_stranded = True if stranded_mode != 'None' else False
+        self.run_stranded = stranded_mode is not None and stranded_mode != 'None'
 
         # GTF filehandle
-        fh = open(gtf_file,'rU') if isinstance(gtf_file,str) else gtf_file
+        fh = open(gtf_file,'r') if isinstance(gtf_file,str) else gtf_file
         for rownum, l in enumerate(fh):
             if l.startswith('#'): continue
             f = GTFRow(*l.strip('\n').split('\t'))
             if f.feature != feature_type: continue
-            attr = dict(re.findall('(\w+)\s+"(.+?)";', f.attribute))
+            attr = dict(re.findall(r'(\w+)\s+"(.+?)";', f.attribute))
             attr['strand'] = f.strand
             if self.key not in attr:
                 lg.warning('Skipping row %d: missing attribute "%s"' % (rownum, self.key))
@@ -78,6 +74,7 @@ class _AnnotationIntervalTree(object):
     def subregion(self, ref, start_pos=None, end_pos=None):
         _subannot = type(self).__new__(type(self))
         _subannot.key = self.key
+        _subannot.run_stranded = getattr(self, 'run_stranded', False)
         _subannot.itree = defaultdict(IntervalTree)
 
         if ref in self.itree:
@@ -89,7 +86,7 @@ class _AnnotationIntervalTree(object):
             _subannot.itree[ref] = _subtree
         return _subannot
 
-    def intersect_blocks(self, ref, blocks, frag_strand):
+    def intersect_blocks(self, ref, blocks, frag_strand=None):
         _result = Counter()
         for b_start, b_end in blocks:
             query = Interval(b_start, (b_end + 1))

@@ -2,10 +2,6 @@
 """ Telescope id
 
 """
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import super
-
 import sys
 import os
 from time import time

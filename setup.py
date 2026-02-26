@@ -26,6 +26,13 @@ htslib_include_dirs = [
 ]
 htslib_include_dirs = [d for d in htslib_include_dirs if path.exists(str(d)) ]
 
+# Add pysam include dirs for cimport resolution and C headers
+try:
+    import pysam
+    htslib_include_dirs.extend(pysam.get_include())
+except (ImportError, IndexError):
+    pass
+
 ext = '.pyx' if USE_CYTHON else '.c'
 extensions = [
     Extension("telescope.utils.calignment",
@@ -36,7 +43,8 @@ extensions = [
 
 if USE_CYTHON:
     from Cython.Build import cythonize
-    extensions = cythonize(extensions)
+    extensions = cythonize(extensions,
+                           include_path=['telescope/utils'] + htslib_include_dirs)
 
 setup(
     name='telescope-ngs',

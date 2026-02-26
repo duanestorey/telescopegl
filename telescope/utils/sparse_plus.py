@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
 """ Provides sparse matrix classes augmented with additional functions
 """
-from __future__ import division
-
-from future import standard_library
-standard_library.install_aliases()
-from builtins import range
-
 import numpy as np
 import scipy.sparse
 
