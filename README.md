@@ -40,6 +40,46 @@ pip install git+https://github.com/duanestorey/polymerase.git
 polymerase --version
 ```
 
+## Performance Optimization
+
+Polymerase runs out of the box using scipy's stock sparse matrix routines
+(**CPU stock** backend). For significantly faster performance, install the
+optional acceleration packages:
+
+```bash
+pip install numba
+```
+
+This enables the **CPU-Optimized (Numba)** backend, which provides:
+
+- **5-50x faster** sparse kernel operations via JIT-compiled Numba kernels
+- **Thread-parallel EM** when using `--parallel_blocks` (Numba releases the GIL)
+
+On **Intel** systems, you can additionally install MKL-accelerated sparse
+matrix multiplication:
+
+```bash
+pip install sparse-dot-mkl
+```
+
+This is particularly effective on Intel CPUs (Xeon, 12th-14th gen Core) since
+MKL is Intel's own optimized math library. On Apple Silicon, MKL is not
+available, but Numba JIT still provides substantial speedups via LLVM.
+
+Polymerase auto-detects available packages at startup and selects the best
+backend. The active backend is shown in the console output:
+
+```
+  Backend    CPU-Optimized (Numba)
+```
+
+| Backend | Packages Required | Typical Speedup |
+|---------|-------------------|-----------------|
+| CPU (scipy) | *none (default)* | baseline |
+| CPU-Optimized (Numba) | `numba` | 5-50x on sparse ops |
+| CPU-Optimized (Numba+MKL) | `numba`, `sparse-dot-mkl` | best on Intel |
+| GPU (CuPy) | `cupy` | best on NVIDIA GPUs |
+
 ## Testing
 
 A BAM file (`alignment.bam`) and annotation (`annotation.gtf`) are included in
@@ -125,6 +165,10 @@ Input Options:
                         Used internally to represent alignments. Must be
                         different from all other feature names. (default:
                         __no_feature)
+  --classes CLASSES      Comma-separated list of TE classes to include (e.g.,
+                        LTR,LINE,SINE). Filters GTF during loading. If
+                        omitted, all classes are loaded. Useful for large
+                        RepeatMasker GTFs to reduce memory usage. (default: None)
   --ncpu NCPU           Number of cores to use. (Multiple cores not supported
                         yet). (default: 1)
   --tempdir TEMPDIR     Path to temporary directory. Temporary files will be
@@ -422,3 +466,7 @@ When cofactors are active (the default), additional output files are produced:
 
 **`normalize` cofactor:**
 - `{tag}-normalized_counts.tsv` — per-locus TPM, RPKM, and CPM values alongside raw counts
+
+## Version History
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history.

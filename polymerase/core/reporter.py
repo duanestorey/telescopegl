@@ -91,7 +91,7 @@ def output_report(feat_index, feature_length, run_info, tl, reassign_mode, conf_
     _comment += ['{}:{}'.format(*tup) for tup in run_info.items()]
 
     with open(stats_filename, 'w') as outh:
-        outh.write('\t'.join(_comment))
+        outh.write('\t'.join(_comment) + '\n')
         _stats_report.to_csv(outh, sep='\t', index=False)
 
     with open(counts_filename, 'w') as outh:

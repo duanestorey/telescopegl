@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "polymerase"
-version = "2.0.0"
+version = "2.0.3"
 description = "Single locus resolution of Transposable Element expression using next-generation sequencing."
 readme = "README.md"
 license = "MIT"

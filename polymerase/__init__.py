@@ -4,4 +4,4 @@
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-__version__ = '2.0.1'
+__version__ = '2.0.3'

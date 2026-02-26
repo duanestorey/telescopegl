@@ -11,6 +11,8 @@ from collections import Counter, OrderedDict, defaultdict, namedtuple
 
 from intervaltree import Interval, IntervalTree
 
+from .gtf_utils import detect_family_class_attrs
+
 GTFRow = namedtuple('GTFRow', ['chrom', 'source', 'feature', 'start', 'end', 'score', 'strand', 'frame', 'attribute'])
 
 
@@ -23,12 +25,19 @@ def merge_intervals(a, b, d=None):
 
 
 class _AnnotationIntervalTree:
-    def __init__(self, gtf_file, attribute_name, stranded_mode, feature_type='exon'):
+    def __init__(self, gtf_file, attribute_name, stranded_mode, feature_type='exon', classes=None):
         lg.debug('Using intervaltree for annotation.')
         self.loci = OrderedDict()
         self.key = attribute_name
         self.itree = defaultdict(IntervalTree)
         self.run_stranded = stranded_mode is not None and stranded_mode != 'None'
+
+        # Auto-detect class attribute name for --classes filtering
+        if classes and isinstance(gtf_file, str):
+            _family_key, _class_key = detect_family_class_attrs(gtf_file)
+            lg.info(f'Filtering GTF by classes: {classes} (using attribute: {_class_key})')
+        else:
+            _class_key = None
 
         # GTF filehandle
         fh = open(gtf_file) if isinstance(gtf_file, str) else gtf_file  # noqa: SIM115
@@ -40,6 +49,11 @@ class _AnnotationIntervalTree:
                 continue
             attr = dict(re.findall(r'(\w+)\s+"(.+?)";', f.attribute))
             attr['strand'] = f.strand
+
+            # Filter by --classes if specified
+            if classes and _class_key and attr.get(_class_key, '') not in classes:
+                continue
+
             if self.key not in attr:
                 lg.warning(f'Skipping row {rownum}: missing attribute "{self.key}"')
                 continue
@@ -51,16 +65,15 @@ class _AnnotationIntervalTree:
             """ Add to interval tree """
             new_iv = Interval(int(f.start), int(f.end) + 1, attr)
             # Merge overlapping intervals from same locus
-            if True:
-                overlap = self.itree[f.chrom].overlap(new_iv)
-                if len(overlap) > 0:
-                    mergeable = [iv for iv in overlap if iv.data[self.key] == attr[self.key]]
-                    if mergeable:
-                        assert len(mergeable) == 1, 'Error'
+            overlap = self.itree[f.chrom].overlap(new_iv)
+            if len(overlap) > 0:
+                mergeable = [iv for iv in overlap if iv.data[self.key] == attr[self.key]]
+                if mergeable:
+                    for mergeable_iv in mergeable:
                         new_iv = merge_intervals(
-                            mergeable[0], new_iv, {self.key: attr[self.key], 'strand': attr['strand']}
+                            mergeable_iv, new_iv, {self.key: attr[self.key], 'strand': attr['strand']}
                         )
-                        self.itree[f.chrom].remove(mergeable[0])
+                        self.itree[f.chrom].remove(mergeable_iv)
             self.itree[f.chrom].add(new_iv)
 
     def feature_length(self):
