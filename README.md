@@ -200,6 +200,11 @@ Model Parameters:
                         criteria. (default: False)
   --skip_em             Exits after loading alignment and saving checkpoint
                         file. (default: False)
+
+Performance Options:
+
+  --parallel_blocks     Decompose into independent blocks and solve in
+                        parallel. (default: False)
 ```
 
 

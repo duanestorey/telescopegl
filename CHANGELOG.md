@@ -4,7 +4,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased](https://github.com/duanestorey/polymerase/tree/main)
+## [2.0.0](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-26
 
 ### Added
 
@@ -59,6 +59,13 @@ All notable changes to this project will be documented in this file.
   for managing version strings through git tags
 
 ### Changed
+
+- **Renamed project from Telescope to Polymerase**: Full package restructure into
+  extensible subpackages (`cli/`, `core/`, `sparse/`, `annotation/`, `alignment/`,
+  `utils/`). Classes renamed: `Telescope` → `Polymerase`, `scTelescope` →
+  `scPolymerase`, `TelescopeLikelihood` → `PolymeraseLikelihood`. CLI commands
+  are now `polymerase assign` and `polymerase resume`. Attribution to the original
+  Telescope project by Matthew Bendall is preserved throughout.
 
 - **Coordinate-sorted BAMs now supported**: Previously required collated/name-sorted
   BAMs. Indexed BAMs are now auto-detected and use the faster region-based loading
