@@ -163,6 +163,28 @@ Backend-agnostic math API. Primers call `ops.dot()`, `ops.norm()`, `ops.svd()`, 
 - `test_compute.py` -- 19 tests (ComputeOps/CpuOps methods)
 - `test_plugins.py` -- 22 tests (ABCs, snapshots, registry, assign primer, cofactors)
 
+## Linting & CI
+
+### Ruff
+Configured in `pyproject.toml` under `[tool.ruff]`. Single tool replaces flake8/pylint/black/isort.
+
+- **Line length**: 120
+- **Quote style**: single
+- **Rules**: E, W, F, I, UP, B, SIM, N
+- **Key ignores**: E501 (line length), N802/N803/N806 (matrix variable naming like `Q`, `Y`, `X`), N801 (`scPolymerase`, `csr_matrix_plus`), B027 (optional ABC hooks), SIM108 (ternary preference)
+- **Test relaxations**: E501, B, SIM, E741, F841
+
+**Commands:**
+- `ruff check polymerase/` — lint check
+- `ruff format --check polymerase/` — format check
+- `ruff check --fix .` — auto-fix safe issues
+- `ruff format .` — reformat
+
+### GitHub Actions CI
+`.github/workflows/test.yml` runs on push to `main` and PRs:
+- **Lint job**: `astral-sh/ruff-action` (check + format)
+- **Test job**: conda-based matrix (Python 3.10, 3.12, 3.13 on ubuntu-latest), installs via `environment.yml` + `pip install -e . --no-build-isolation`, runs `pytest -v --tb=short`
+
 ## Key Conventions
 
 - Sparse matrices use `csr_matrix_plus` from `matrix.py` (or `CpuOptimizedCsrMatrix` when Numba available)
@@ -189,6 +211,10 @@ Backend-agnostic math API. Primers call `ops.dot()`, `ops.norm()`, `ops.svd()`, 
 - `numba` (JIT compilation for sparse kernels)
 - `sparse_dot_mkl` (MKL-accelerated sparse ops)
 - `threadpoolctl` (BLAS thread control)
+
+### Dev
+- `ruff` (linting + formatting)
+- `pytest` (test runner)
 
 ## Optimizations Implemented
 
