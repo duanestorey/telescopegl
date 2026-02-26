@@ -1,45 +1,45 @@
-# Telescope Optimization Plan
+# Polymerase Optimization Plan
 
 ## Context
 
-Telescope uses an EM algorithm on sparse matrices (N fragments x K features) to resolve multi-mapped RNA-seq reads. The pipeline is I/O-dominated: BAM loading accounts for 90%+ of runtime on real data. Optimizations target both I/O and computation.
+Polymerase uses an EM algorithm on sparse matrices (N fragments x K features) to resolve multi-mapped RNA-seq reads. The pipeline is I/O-dominated: BAM loading accounts for 90%+ of runtime on real data. Optimizations target both I/O and computation.
 
 ---
 
 ## Optimization Dimensions
 
 ```
-Dimension 1: ELIMINATE WASTED I/O      → Region pre-filtering skips ~99% of reads
-Dimension 2: SPEED UP I/O              → pysam multi-threaded BAM decompression
-Dimension 3: DECOMPOSE the problem     → Connected components split matrix into independent blocks
-Dimension 4: ACCELERATE the math       → Numba JIT kernels for sparse operations
-Dimension 5: PARALLELIZE pipeline tail → Concurrent reassignment, batch matrix construction
+Dimension 1: ELIMINATE WASTED I/O      -> Region pre-filtering skips ~99% of reads
+Dimension 2: SPEED UP I/O              -> pysam multi-threaded BAM decompression
+Dimension 3: DECOMPOSE the problem     -> Connected components split matrix into independent blocks
+Dimension 4: ACCELERATE the math       -> Numba JIT kernels for sparse operations
+Dimension 5: PARALLELIZE pipeline tail -> Concurrent reassignment, batch matrix construction
 ```
 
 ### Pipeline Architecture
 
 ```
 Stage 0: Smart BAM Access
-    ├─ If BAM is coordinate-sorted + indexed:
-    │     → Two-pass: fetch TE regions → buffer relevant fragments
-    │     → SKIPS ~99% of reads entirely
-    │     → Multi-threaded decompression (pysam threads=N)
-    └─ If BAM is name-collated:
-          → Sequential loading with pysam threads=N
+    +- If BAM is coordinate-sorted + indexed:
+    |     -> Two-pass: fetch TE regions -> buffer relevant fragments
+    |     -> SKIPS ~99% of reads entirely
+    |     -> Multi-threaded decompression (pysam threads=N)
+    +- If BAM is name-collated:
+          -> Sequential loading with pysam threads=N
 
-Stage 1: Batch Matrix Construction (COO arrays → CSR)
+Stage 1: Batch Matrix Construction (COO arrays -> CSR)
 
 Stage 2: Block Decomposition (scipy connected_components)
-    ┌─ Block A  (N_a × K_a) — e.g., HERVK family
-    ├─ Block B  (N_b × K_b) — e.g., LINE1 family
-    └─ Block C  (N_c × K_c) — e.g., Alu family
-              ↓ parallel (ThreadPoolExecutor, Numba releases GIL)
+    +- Block A  (N_a x K_a) -- e.g., HERVK family
+    +- Block B  (N_b x K_b) -- e.g., LINE1 family
+    +- Block C  (N_c x K_c) -- e.g., Alu family
+              | parallel (ThreadPoolExecutor, Numba releases GIL)
 
 Stage 3: EM on each block
-    ┌─ Block A → Thread 1 → π_a, θ_a
-    ├─ Block B → Thread 2 → π_b, θ_b
-    └─ Block C → Thread 3 → π_c, θ_c
-              ↓ merge results
+    +- Block A -> Thread 1 -> pi_a, theta_a
+    +- Block B -> Thread 2 -> pi_b, theta_b
+    +- Block C -> Thread 3 -> pi_c, theta_c
+              | merge results
 
 Stage 4: Reassignment + Reports
 ```
@@ -77,41 +77,41 @@ I/O dominates at 93% of runtime. The EM is already fast enough with block decomp
 
 ## Implementation Status
 
-### Phase 0: Test Foundation + Code Re-org ✅
+### Phase 0: Test Foundation + Code Re-org
 
-- Migrated nose → pytest
+- Migrated nose -> pytest
 - 86 tests (sparse_plus, EM, baseline equivalence, annotation)
-- Module split: model.py → model.py + likelihood.py + reporter.py
+- Module split: model.py -> model.py + likelihood.py + reporter.py
 - Removed Python 2 compatibility, dead code, unused files
 - Baseline benchmarking
 
-### Phase 1: CPU Optimizations ✅
+### Phase 1: CPU Optimizations
 
 - **`backend.py`**: Two-tier backend (CPU-Optimized / Stock CPU), auto-detection
-- **`cpu_optimized_sparse.py`**: Numba JIT kernels for `binmax`, `choose_random`, `threshold_filter`, `indicator`
+- **`numba_matrix.py`**: Numba JIT kernels for `binmax`, `choose_random`, `threshold_filter`, `indicator`
 - **`decompose.py`**: Connected component block decomposition (`find_blocks`, `split_matrix`, `merge_results`)
 - **Tests**: 33 CPU-optimized sparse tests, 10 decomposition tests, 6 numerical equivalence tests
 
-### Phase 2: Pipeline Integration ✅
+### Phase 2: Pipeline Integration
 
 - `threshold_filter()` and `indicator()` on `csr_matrix_plus`
 - Backend-aware `likelihood.py` (uses `get_sparse_class()`)
 - Backend-aware `model.py` (batch COO, pysam threads)
-- `em_parallel()` in `TelescopeLikelihood`
+- `em_parallel()` in `PolymeraseLikelihood`
 
-### Phase 3: Indexed BAM Loading ✅
+### Phase 3: Indexed BAM Loading
 
-- **`_load_indexed()`**: Two-pass approach (TE region fetch → full buffer → process)
+- **`_load_indexed()`**: Two-pass approach (TE region fetch -> full buffer -> process)
 - **`_get_te_regions()`**: Extract TE coordinates with 500bp padding, merge overlapping
 - **`_find_primary()`**: Fix supplementary alignment classification bug
-- **Auto-detection**: `has_index and not updated_sam` → indexed path
+- **Auto-detection**: `has_index and not updated_sam` -> indexed path
 - 1% test data (30MB BAM + 18MB GTF) checked into repo
 - 35 pipeline tests including indexed/sequential equivalence
 
-### Remaining (low priority)
+### Deferred (future sprint)
 
-- **Parallel reassignment**: ThreadPoolExecutor for 6 reassignment modes concurrently. Low impact (~0.1s currently).
-- **In-memory parallel loading**: Replace temp file I/O in `_load_parallel()` with in-memory return values.
+- **Parallel reassignment**: ThreadPoolExecutor for 6 reassignment modes concurrently. Low impact (~0.1s currently). See TODO in `polymerase/core/likelihood.py`.
+- **In-memory parallel loading**: Replace temp file I/O in `_load_parallel()` with in-memory return values. See TODO in `polymerase/core/model.py`.
 
 ---
 
@@ -130,34 +130,34 @@ I/O dominates at 93% of runtime. The EM is already fast enough with block decomp
 ### Created
 | File | Purpose |
 |------|---------|
-| `telescope/utils/backend.py` | Backend auto-detection and dispatch |
-| `telescope/utils/cpu_optimized_sparse.py` | Numba JIT sparse operations |
-| `telescope/utils/decompose.py` | Block decomposition |
-| `telescope/utils/likelihood.py` | EM algorithm (extracted from model.py) |
-| `telescope/utils/reporter.py` | Report I/O (extracted from model.py) |
-| `telescope/tests/test_sparse_plus.py` | 45 sparse matrix tests |
-| `telescope/tests/test_em.py` | 33 EM + baseline tests |
-| `telescope/tests/test_cpu_optimized_sparse.py` | 33 Numba equivalence tests |
-| `telescope/tests/test_decomposition.py` | 10 block decomposition tests |
-| `telescope/tests/test_numerical_equivalence.py` | 6 cross-backend tests |
-| `telescope/tests/test_1pct_pipeline.py` | 35 pipeline tests |
-| `telescope/tests/benchmark_1pct.py` | Benchmarking script |
+| `polymerase/sparse/backend.py` | Backend auto-detection and dispatch |
+| `polymerase/sparse/numba_matrix.py` | Numba JIT sparse operations |
+| `polymerase/sparse/decompose.py` | Block decomposition |
+| `polymerase/core/likelihood.py` | EM algorithm (extracted from model.py) |
+| `polymerase/core/reporter.py` | Report I/O (extracted from model.py) |
+| `polymerase/tests/test_sparse_plus.py` | 45 sparse matrix tests |
+| `polymerase/tests/test_em.py` | 33 EM + baseline tests |
+| `polymerase/tests/test_cpu_optimized_sparse.py` | 33 Numba equivalence tests |
+| `polymerase/tests/test_decomposition.py` | 10 block decomposition tests |
+| `polymerase/tests/test_numerical_equivalence.py` | 6 cross-backend tests |
+| `polymerase/tests/test_1pct_pipeline.py` | 35 pipeline tests |
+| `polymerase/tests/benchmark_1pct.py` | Benchmarking script |
 | `test_data/SRR9666161_1pct_collated.bam` | 1% test BAM (30MB) |
 | `test_data/retro.hg38.gtf` | Full TE annotation (18MB) |
 
 ### Modified
 | File | Changes |
 |------|---------|
-| `telescope/utils/model.py` | `_load_indexed()`, `_get_te_regions()`, batch COO, pysam threads, backend-aware sparse |
-| `telescope/utils/alignment.py` | `_find_primary()`, supplementary alignment fix |
-| `telescope/utils/sparse_plus.py` | `threshold_filter()`, `indicator()` |
-| `telescope/telescope_assign.py` | `backend.configure()` call |
-| `telescope/telescope_resume.py` | `backend.configure()` call |
+| `polymerase/core/model.py` | `_load_indexed()`, `_get_te_regions()`, batch COO, pysam threads, backend-aware sparse |
+| `polymerase/alignment/fragments.py` | `_find_primary()`, supplementary alignment fix |
+| `polymerase/sparse/matrix.py` | `threshold_filter()`, `indicator()` |
+| `polymerase/cli/assign.py` | `backend.configure()` call |
+| `polymerase/cli/resume.py` | `backend.configure()` call |
 
 ### Deleted
 | File | Reason |
 |------|--------|
-| `telescope/utils/alignment_parsers.py` | Entirely unused |
+| `telescope/utils/alignment_parsers.py` (deleted pre-rename) | Entirely unused |
 
 ---
 
@@ -165,14 +165,14 @@ I/O dominates at 93% of runtime. The EM is already fast enough with block decomp
 
 ```bash
 # Full test suite (170 tests)
-pytest telescope/tests/ -v
+pytest polymerase/tests/ -v
 
 # Golden log-likelihood on bundled test data
-eval $(telescope test) 2>&1 | grep 'Final log-likelihood'
+eval $(polymerase test) 2>&1 | grep 'Final log-likelihood'
 # Expected: 95252.596293
 
 # End-to-end comparison (requires sorted+indexed BAM)
-telescope assign sorted.bam annotation.gtf --outdir /tmp/indexed --exp_tag indexed
-telescope assign collated.bam annotation.gtf --outdir /tmp/sequential --exp_tag sequential
+polymerase assign sorted.bam annotation.gtf --outdir /tmp/indexed --exp_tag indexed
+polymerase assign collated.bam annotation.gtf --outdir /tmp/sequential --exp_tag sequential
 diff /tmp/indexed/indexed-TE_counts.tsv /tmp/sequential/sequential-TE_counts.tsv
 ```

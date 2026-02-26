@@ -5,7 +5,7 @@
 ### 1. Clone repository
 
 ```bash
-git clone git@github.com:duanestorey/telescopegl.git
+git clone git@github.com:duanestorey/polymerase.git
 ```
 
 ### 2. Create conda environment
@@ -13,8 +13,8 @@ git clone git@github.com:duanestorey/telescopegl.git
 An environment file is included in this repo.
 
 ```bash
-mamba env create -n telescope_dev -f environment.yml
-conda activate telescope_dev
+mamba env create -n polymerase_dev -f environment.yml
+conda activate polymerase_dev
 ```
 
 ### 3. Install in development mode
@@ -38,13 +38,13 @@ stock scipy operations for `binmax`, `choose_random`, `threshold_filter`, and
 ### Quick test (bundled data)
 
 ```bash
-eval $(telescope test) 2>&1 | grep 'Final log-likelihood' | grep -q '95252.56293' && echo "Test OK" || echo "Test FAIL"
+eval $(polymerase test) 2>&1 | grep 'Final log-likelihood' | grep -q '95252.56293' && echo "Test OK" || echo "Test FAIL"
 ```
 
 ### Full test suite
 
 ```bash
-pytest telescope/tests/ -v
+pytest polymerase/tests/ -v
 ```
 
 170 tests covering:
@@ -58,8 +58,8 @@ pytest telescope/tests/ -v
 ### Test data
 
 **Bundled in repo** (used by default):
-- `telescope/data/alignment.bam` — small test BAM (1000 fragments)
-- `telescope/data/annotation.gtf` — small test GTF (59 features)
+- `polymerase/data/alignment.bam` — small test BAM (1000 fragments)
+- `polymerase/data/annotation.gtf` — small test GTF (59 features)
 - `test_data/SRR9666161_1pct_collated.bam` — 1% subsample (30MB, ~136K fragments)
 - `test_data/retro.hg38.gtf` — full retro.hg38 TE annotation (28,513 features)
 
@@ -71,7 +71,7 @@ pytest telescope/tests/ -v
 ### Benchmarking
 
 ```bash
-python -m pytest telescope/tests/test_1pct_pipeline.py -v -k "TestFullScale" -s
+python -m pytest polymerase/tests/test_1pct_pipeline.py -v -k "TestFullScale" -s
 ```
 
 The full-scale tests (require 100% BAM) report per-stage timing and verify the
@@ -80,42 +80,53 @@ complete pipeline runs under 60 seconds.
 ## Architecture
 
 ```
-telescope/
-├── __main__.py                  # Entry point, argparse routing
-├── telescope_assign.py          # assign subcommand
-├── telescope_resume.py          # resume subcommand
+polymerase/
+├── __init__.py                          # Package init
+├── __main__.py                          # Entry point, argparse routing
+├── cli/
+│   ├── __init__.py                      # SubcommandOptions, configure_logging()
+│   ├── assign.py                        # assign subcommand
+│   └── resume.py                        # resume subcommand
+├── core/
+│   ├── model.py                         # Polymerase orchestrator: BAM loading, matrix construction, Assigner
+│   ├── likelihood.py                    # PolymeraseLikelihood: EM algorithm (estep, mstep, em, em_parallel, reassign)
+│   └── reporter.py                      # output_report() + update_sam()
+├── sparse/
+│   ├── matrix.py                        # csr_matrix_plus: custom scipy CSR
+│   ├── numba_matrix.py                  # CpuOptimizedCsrMatrix: Numba JIT subclass
+│   ├── backend.py                       # Backend auto-detection and dispatch
+│   └── decompose.py                     # Connected component block decomposition
+├── annotation/
+│   ├── __init__.py                      # Annotation factory
+│   ├── intervaltree.py                  # IntervalTree-based annotation
+│   └── bisect.py                        # Bisect-based annotation
+├── alignment/
+│   ├── fragments.py                     # Fragment fetching, read pairing, _find_primary()
+│   ├── _helpers.py                      # Alignment helpers
+│   ├── calignment.pyx                   # Cython AlignedPair
+│   └── calignment.pxd                   # Cython declarations
 ├── utils/
-│   ├── model.py                 # Telescope orchestrator: BAM loading, matrix construction, Assigner
-│   ├── likelihood.py            # TelescopeLikelihood: EM algorithm (estep, mstep, em, em_parallel, reassign)
-│   ├── reporter.py              # output_report() + update_sam()
-│   ├── sparse_plus.py           # csr_matrix_plus: custom scipy CSR
-│   ├── cpu_optimized_sparse.py  # CpuOptimizedCsrMatrix: Numba JIT subclass
-│   ├── backend.py               # Backend auto-detection and dispatch
-│   ├── decompose.py             # Connected component block decomposition
-│   ├── alignment.py             # Fragment fetching, read pairing, _find_primary()
-│   ├── calignment.pyx/pxd       # Cython AlignedPair
-│   ├── annotation.py            # Annotation factory
-│   ├── helpers.py               # Utilities (phred, format_minutes, merge_overlapping_regions)
-│   └── __init__.py              # SubcommandOptions, configure_logging()
+│   ├── helpers.py                       # Utilities (phred, format_minutes, merge_overlapping_regions)
+│   └── colors.py                        # Color utilities
 ├── tests/
-│   ├── test_annotation_parsers.py   # 8 tests
-│   ├── test_sparse_plus.py          # 45 tests
-│   ├── test_em.py                   # 33 tests
-│   ├── test_cpu_optimized_sparse.py # 33 tests
-│   ├── test_decomposition.py        # 10 tests
-│   ├── test_numerical_equivalence.py # 6 tests
-│   ├── test_1pct_pipeline.py        # 35 tests
-│   └── benchmark_1pct.py            # Benchmarking script
+│   ├── test_annotation_parsers.py       # 8 tests
+│   ├── test_sparse_plus.py              # 45 tests
+│   ├── test_em.py                       # 33 tests
+│   ├── test_cpu_optimized_sparse.py     # 33 tests
+│   ├── test_decomposition.py            # 10 tests
+│   ├── test_numerical_equivalence.py    # 6 tests
+│   ├── test_1pct_pipeline.py            # 35 tests
+│   └── benchmark_1pct.py               # Benchmarking script
 └── data/
     ├── alignment.bam
     ├── annotation.gtf
-    └── telescope_report.tsv
+    └── report.tsv
 ```
 
 ## BAM Loading Paths
 
 1. **Indexed** (`_load_indexed`): For coordinate-sorted BAMs with `.bai` index.
-   Two-pass: fetches TE regions → buffers relevant fragments → processes identically
+   Two-pass: fetches TE regions -> buffers relevant fragments -> processes identically
    to sequential. 4-8x faster.
 
 2. **Sequential** (`_load_sequential`): For collated/name-sorted BAMs. Streams all
@@ -124,4 +135,4 @@ telescope/
 3. **Parallel** (`_load_parallel`): Multi-process variant of sequential for sorted BAMs.
    Uses `multiprocessing` with temp files.
 
-Auto-detection in `load_alignment()`: indexed BAM + no `--updated_sam` → indexed path.
+Auto-detection in `load_alignment()`: indexed BAM + no `--updated_sam` -> indexed path.
