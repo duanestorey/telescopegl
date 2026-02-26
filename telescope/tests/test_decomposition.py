@@ -1,10 +1,17 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Tests for connected component block decomposition.
 
 Tests cover:
 - Synthetic 2-block matrix decomposition
 - Single-block matrix (n_components == 1)
-- Round-trip: split_matrix → merge_results
+- Round-trip: split_matrix -> merge_results
 - Bundled test data confirms 1 component (all ERVK)
 """
 import os
@@ -16,8 +23,6 @@ from numpy.testing import assert_array_almost_equal
 import scipy.sparse
 from telescope.utils.sparse_plus import csr_matrix_plus
 from telescope.utils.decompose import find_blocks, split_matrix, merge_results
-
-__author__ = 'Duane Storey'
 
 # Path to bundled test data
 DATA_DIR = os.path.join(

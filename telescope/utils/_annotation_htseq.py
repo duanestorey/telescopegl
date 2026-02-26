@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 from __future__ import print_function
 from __future__ import absolute_import
 from builtins import object
@@ -7,9 +14,6 @@ from collections import Counter, OrderedDict
 import logging as lg
 
 import HTSeq
-
-__author__ = 'Matthew L. Bendall'
-__copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
 
 
 class _AnnotationHTSeq(object):

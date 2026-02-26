@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Numba-accelerated sparse matrix operations for Telescope.
 
 Provides CpuOptimizedCsrMatrix, a subclass of csr_matrix_plus with
 Numba JIT-compiled kernels for hot-path operations. Falls back to
 the base class methods when Numba is unavailable.
 """
-__author__ = 'Duane Storey'
 
 import numpy as np
 from .sparse_plus import csr_matrix_plus

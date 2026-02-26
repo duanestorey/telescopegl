@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Benchmark Telescope pipeline on 1% subsampled BAM with full TE annotation.
 
 Uses SRR9666161_1pct_collated.bam (136K fragments, 30MB) with retro.hg38.gtf
@@ -20,8 +27,6 @@ import tracemalloc
 from collections import OrderedDict
 
 import numpy as np
-
-__author__ = 'Duane Storey'
 
 # Paths relative to repo root
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

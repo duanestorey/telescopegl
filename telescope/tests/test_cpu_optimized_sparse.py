@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Tests for CpuOptimizedCsrMatrix Numba-accelerated sparse operations.
 
 Validates bitwise equivalence between csr_matrix_plus and
@@ -15,8 +22,6 @@ from telescope.utils.sparse_plus import csr_matrix_plus
 
 numba = pytest.importorskip('numba')
 from telescope.utils.cpu_optimized_sparse import CpuOptimizedCsrMatrix  # noqa: E402
-
-__author__ = 'Duane Storey'
 
 # Path to bundled test data
 DATA_DIR = os.path.join(

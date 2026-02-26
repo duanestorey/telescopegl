@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Connected component block decomposition for parallel EM.
 
 Decomposes the N x K score matrix into independent blocks using
 scipy.sparse.csgraph.connected_components on the feature adjacency graph.
 """
-__author__ = 'Duane Storey'
 
 import numpy as np
 import scipy.sparse

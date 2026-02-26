@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Numerical equivalence tests across tiers and modes.
 
 Tests cover:
@@ -17,8 +24,6 @@ from telescope.utils.sparse_plus import csr_matrix_plus
 from telescope.utils.model import Telescope, TelescopeLikelihood
 from telescope.utils.annotation import get_annotation_class
 from telescope.utils import backend
-
-__author__ = 'Duane Storey'
 
 DATA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data'

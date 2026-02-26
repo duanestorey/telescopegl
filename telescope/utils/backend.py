@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Backend abstraction for Telescope compute acceleration.
 
 Provides auto-detection of available acceleration libraries (Numba, MKL)
@@ -6,8 +13,6 @@ and returns the appropriate sparse matrix class for the active backend.
 """
 import logging as lg
 from dataclasses import dataclass, field
-
-__author__ = 'Duane Storey'
 
 
 @dataclass

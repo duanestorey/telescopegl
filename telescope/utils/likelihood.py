@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """TelescopeLikelihood — EM algorithm for resolving multi-mapped reads.
 
 This module contains the core EM algorithm used by Telescope to assign
@@ -11,9 +18,6 @@ import numpy as np
 
 from .sparse_plus import csr_matrix_plus as csr_matrix
 from .backend import get_sparse_class
-
-__author__ = 'Matthew L. Bendall'
-__copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
 
 
 class TelescopeLikelihood(object):

@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Integration tests for Telescope pipeline on subsampled BAMs.
 
 Uses SRR9666161 BAMs with retro.hg38.gtf (28K TE loci) to test the full
@@ -23,8 +30,6 @@ import time
 
 import numpy as np
 import pytest
-
-__author__ = 'Duane Storey'
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BAM_1PCT = os.path.join(REPO_ROOT, 'test_data', 'SRR9666161_1pct_collated.bam')

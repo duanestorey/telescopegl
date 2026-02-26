@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """ Parse SAM/BAM alignment files
 
 """
@@ -11,9 +18,6 @@ import pysam
 from telescope.utils.calignment import AlignedPair
 from . import model
 from . import BIG_INT
-
-__author__ = 'Matthew L. Bendall'
-__copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
 
 CODES = [
     ('SU', 'single_unmapped'),

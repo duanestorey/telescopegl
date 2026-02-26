@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """ Telescope id
 
 """
@@ -16,9 +23,6 @@ from .utils.helpers import format_minutes as fmtmins
 from .utils.model import Telescope, scTelescope, TelescopeLikelihood
 from .telescope_assign import IDOptions
 from .utils import backend
-
-__author__ = 'Matthew L. Bendall'
-__copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
 
 class BulkResumeOptions(IDOptions):
     OPTS = """

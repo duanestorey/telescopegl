@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Multi-tier benchmark for Telescope pipeline.
 
 Runs the full pipeline with the active backend and prints a reference table
@@ -19,8 +26,6 @@ import tracemalloc
 from collections import OrderedDict
 
 import numpy as np
-
-__author__ = 'Duane Storey'
 
 # Reference values from stock baseline
 REFERENCE = {

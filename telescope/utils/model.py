@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+# This file is part of TelescopeGL.
+# Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
+#
+# New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
+# Licensed under MIT License.
+
 """Telescope pipeline: BAM loading, matrix construction, and orchestration.
 
 TelescopeLikelihood (EM algorithm) is in likelihood.py.
@@ -29,9 +36,6 @@ from . import BIG_INT
 from .likelihood import TelescopeLikelihood
 from .reporter import output_report as _output_report_func
 from .reporter import update_sam as _update_sam_func
-
-__author__ = 'Matthew L. Bendall'
-__copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
 
 
 def process_overlap_frag(pairs, overlap_feats):
