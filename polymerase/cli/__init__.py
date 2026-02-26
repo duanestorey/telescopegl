@@ -9,9 +9,17 @@
 import yaml
 import logging
 from collections import OrderedDict
-# These are needed for eval statements:
-import sys
 import argparse
+
+# Safe type lookup for YAML-defined CLI options (replaces eval())
+_SAFE_TYPES = {
+    'int': int,
+    'float': float,
+    'str': str,
+    'bool': bool,
+    "argparse.FileType('r')": argparse.FileType('r'),
+    "argparse.FileType('w')": argparse.FileType('w'),
+}
 
 
 class SubcommandOptions(object):
@@ -52,7 +60,13 @@ class SubcommandOptions(object):
                     _arg_name = '--{}'.format(arg_name)
 
                 if 'type' in _d:
-                    _d['type'] = eval(_d['type'])
+                    _type_str = _d['type']
+                    if _type_str not in _SAFE_TYPES:
+                        raise ValueError(
+                            "Unsupported type '{}' in CLI option '{}'. "
+                            "Allowed: {}".format(_type_str, arg_name, list(_SAFE_TYPES.keys()))
+                        )
+                    _d['type'] = _SAFE_TYPES[_type_str]
 
                 argparse_grp.add_argument(_arg_name, **_d)
 

@@ -21,6 +21,7 @@ class BackendInfo:
     name: str = 'cpu_stock'
     has_numba: bool = False
     has_mkl: bool = False
+    has_cupy: bool = False
     threadsafe_parallelism: bool = False
 
 
@@ -66,6 +67,17 @@ def _detect_mkl():
         return False
 
 
+def _detect_cupy():
+    """Check if CuPy is available with a working CUDA runtime."""
+    try:
+        import cupy as cp
+        # Probe actual GPU availability
+        cp.cuda.runtime.getDeviceCount()
+        return True
+    except Exception:
+        return False
+
+
 def configure():
     """Configure the compute backend based on available libraries.
 
@@ -75,10 +87,15 @@ def configure():
 
     has_numba = _detect_numba()
     has_mkl = _detect_mkl()
+    has_cupy = _detect_cupy()
 
     threadsafe = _detect_threadsafe_threading() if has_numba else False
 
-    if has_numba:
+    if has_cupy:
+        name = 'gpu'
+        lg.info('Backend: gpu (cupy=True, numba={}, mkl={})'.format(
+            has_numba, has_mkl))
+    elif has_numba:
         name = 'cpu_optimized'
         lg.info('Backend: cpu_optimized (numba={}, mkl={}, threadsafe={})'.format(
             has_numba, has_mkl, threadsafe))
@@ -90,6 +107,7 @@ def configure():
         name=name,
         has_numba=has_numba,
         has_mkl=has_mkl,
+        has_cupy=has_cupy,
         threadsafe_parallelism=threadsafe,
     )
     return _active_backend

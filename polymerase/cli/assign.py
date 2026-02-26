@@ -23,7 +23,6 @@ import numpy as np
 from . import SubcommandOptions, configure_logging
 from ..utils.helpers import format_minutes as fmtmins
 from ..core.model import Polymerase, scPolymerase
-from ..core.likelihood import PolymeraseLikelihood
 from ..annotation import get_annotation_class
 from ..sparse import backend
 
@@ -379,26 +378,35 @@ class scIDOptions(IDOptions):
     """
 
 
-def run(args, sc = True):
-    """
+def _parse_primers_arg(opts):
+    """Parse --primers CLI arg into a list of primer names, or None for all."""
+    raw = getattr(opts, 'primers', None)
+    if raw is None or raw == 'all':
+        return None
+    return [p.strip() for p in raw.split(',') if p.strip()]
+
+
+def run(args, sc=True):
+    """Platform orchestrator: loads data, builds snapshots, delegates to primers.
 
     Args:
-        args:
-
-    Returns:
-
+        args: Parsed argparse namespace.
+        sc: True for single-cell mode.
     """
-    option_class = scIDOptions if sc == True else BulkIDOptions
-    opts = option_class(args, sc = sc)
+    from ..plugins.snapshots import AnnotationSnapshot, AlignmentSnapshot
+    from ..plugins.registry import PluginRegistry
+    from ..compute import get_ops
+
+    option_class = scIDOptions if sc else BulkIDOptions
+    opts = option_class(args, sc=sc)
     configure_logging(opts)
     backend.configure()
     lg.info('\n{}\n'.format(opts))
     total_time = time()
 
-    ''' Create Polymerase object '''
-    ts = scPolymerase(opts) if sc == True else Polymerase(opts)
+    # --- Platform: Load Data ---
+    ts = scPolymerase(opts) if sc else Polymerase(opts)
 
-    ''' Load annotation '''
     Annotation = get_annotation_class(opts.annotation_class)
     lg.info('Loading annotation...')
     stime = time()
@@ -406,60 +414,53 @@ def run(args, sc = True):
     lg.info("Loaded annotation in {}".format(fmtmins(time() - stime)))
     lg.info('Loaded {} features.'.format(len(annot.loci)))
 
-    # annot.save(opts.outfile_path('test_annotation.p'))
-
-    ''' Load alignments '''
     lg.info('Loading alignments...')
     stime = time()
     ts.load_alignment(annot)
     lg.info("Loaded alignment in {}".format(fmtmins(time() - stime)))
 
-    ''' Print alignment summary '''
     ts.print_summary(lg.INFO)
-    # if opts.ncpu > 1:
-    #     sys.exit('not implemented yet')
 
-    ''' Exit if no overlap '''
     if ts.run_info['overlap_unique'] + ts.run_info['overlap_ambig'] == 0:
         lg.info("No alignments overlapping annotation")
         lg.info("polymerase assign complete (%s)" % fmtmins(time() - total_time))
         return
 
-    ''' Free up memory used by annotation '''
-    annot = None
+    # --- Platform: Build Snapshots ---
+    annot_snapshot = AnnotationSnapshot(
+        loci=dict(annot.loci),
+        feature_lengths=annot.feature_length(),
+        num_features=len(annot.loci),
+        gtf_path=opts.gtffile,
+        attribute_name=opts.attribute,
+    )
+
+    annot = None  # free memory
     lg.debug('garbage: {:d}'.format(gc.collect()))
 
-    ''' Save object checkpoint '''
     ts.save(opts.outfile_path('checkpoint'))
-    if opts.skip_em:
-        lg.info("Skipping EM...")
-        lg.info("polymerase assign complete (%s)" % fmtmins(time()-total_time))
-        return
 
-    ''' Seed RNG '''
-    seed = ts.get_random_seed()
-    lg.debug("Random seed: {}".format(seed))
-    np.random.seed(seed)
+    alignment_snapshot = AlignmentSnapshot(
+        bam_path=opts.samfile,
+        run_info=dict(ts.run_info),
+        read_index=dict(ts.read_index),
+        feat_index=dict(ts.feat_index),
+        shape=ts.shape,
+        raw_scores=ts.raw_scores,
+        feature_lengths=dict(ts.feature_length),
+    )
 
-    ''' Create likelihood '''
-    ts_model = PolymeraseLikelihood(ts.raw_scores, opts)
+    # Stash tmp_bam path on opts so the assign primer can find it for updated_sam
+    if hasattr(ts, 'tmp_bam'):
+        opts._tmp_bam_path = ts.tmp_bam
 
-    ''' Run Expectation-Maximization '''
-    lg.info('Running Expectation-Maximization...')
-    stime = time()
-    if getattr(opts, 'parallel_blocks', False):
-        ts_model.em_parallel(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
-    else:
-        ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
-    lg.info("EM completed in %s" % fmtmins(time() - stime))
+    # --- Platform: Discover & Run Primers ---
+    registry = PluginRegistry()
+    registry.discover(active_primers=_parse_primers_arg(opts))
+    registry.configure_all(opts, get_ops())
 
-    # Output final report
-    lg.info("Generating Report...")
-    ts.output_report(ts_model, opts.outfile_path('run_stats.tsv'), opts.outfile_path('TE_counts.tsv'))
-
-    if opts.updated_sam:
-        lg.info("Creating updated SAM file...")
-        ts.update_sam(ts_model, opts.outfile_path('updated.bam'))
+    registry.notify('on_annotation_loaded', annot_snapshot)
+    registry.notify('on_matrix_built', alignment_snapshot)
+    registry.commit_all(opts.outdir, opts.exp_tag)
 
     lg.info("polymerase assign complete (%s)" % fmtmins(time() - total_time))
-    return

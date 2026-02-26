@@ -583,11 +583,18 @@ class Polymerase(object):
 
     def output_report(self, tl, stats_filename, counts_filename):
         """Generate TSV reports. Delegates to reporter.output_report()."""
-        return _output_report_func(self, tl, stats_filename, counts_filename)
+        return _output_report_func(
+            self.feat_index, self.feature_length, self.run_info, tl,
+            self.opts.reassign_mode, self.opts.conf_prob,
+            stats_filename, counts_filename,
+        )
 
     def update_sam(self, tl, filename):
         """Update SAM file. Delegates to reporter.update_sam()."""
-        return _update_sam_func(self, tl, filename)
+        return _update_sam_func(
+            self.tmp_bam, self.read_index, self.feat_index,
+            self.run_info, self.opts, tl, filename,
+        )
 
     def print_summary(self, loglev=lg.WARNING):
         _d = Counter()

@@ -6,4 +6,4 @@
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-__version__ = "2.0.0"
+"""Built-in primers and cofactors shipped with Polymerase."""
