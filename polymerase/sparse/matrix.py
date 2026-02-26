@@ -1,28 +1,27 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-""" Provides sparse matrix classes augmented with additional functions
-"""
+"""Provides sparse matrix classes augmented with additional functions"""
+
 import numpy as np
 import scipy.sparse
 
+
 def _recip0(v):
-    ''' Return the reciprocal of a vector '''
+    """Return the reciprocal of a vector"""
     old_settings = np.seterr(divide='ignore')
-    ret = 1. / v
+    ret = 1.0 / v
     ret[np.isinf(ret)] = 0
     np.seterr(**old_settings)
     return ret
 
-class csr_matrix_plus(scipy.sparse.csr_matrix):
 
+class csr_matrix_plus(scipy.sparse.csr_matrix):
     def norm(self, axis=None):
-        """ Normalize matrix along axis
+        """Normalize matrix along axis
 
         Args:
             axis:
@@ -43,7 +42,7 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
 
     def _norm(self, axis=None):
         if axis is None:
-            return type(self)(self.multiply(1. / self.sum()))
+            return type(self)(self.multiply(1.0 / self.sum()))
         elif axis == 0:
             raise NotImplementedError
         elif axis == 1:
@@ -65,7 +64,7 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
             return ret
 
     def scale(self, axis=None):
-        """ Scale matrix so values are between 0 and 1
+        """Scale matrix so values are between 0 and 1
 
         Args:
             axis:
@@ -86,7 +85,7 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
 
     def _scale(self, axis=None):
         if axis is None:
-            return type(self)(self.multiply(1. / self.max()))
+            return type(self)(self.multiply(1.0 / self.max()))
             # ret = self.copy().astype(np.float)
             # return ret / ret.max()
         elif axis == 0:
@@ -95,7 +94,7 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
             return type(self)(self.multiply(_recip0(self.max(1).toarray())))
 
     def binmax(self, axis=None):
-        """ Set max values to 1 and others to 0
+        """Set max values to 1 and others to 0
 
         Args:
             axis:
@@ -112,33 +111,26 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
              [0 0 1]
              [0 0 1]]
         """
-        if axis is None:
-            raise NotImplementedError
-        elif axis == 0:
+        if axis is None or axis == 0:
             raise NotImplementedError
         elif axis == 1:
             _data = np.zeros(self.data.shape, dtype=np.int8)
             rit = zip(self.indptr[:-1], self.indptr[1:], self.max(1).toarray())
             for d_start, d_end, d_max in rit:
-                _data[d_start:d_end] = (self.data[d_start:d_end] == d_max)
-            ret = type(self)((_data, self.indices.copy(), self.indptr.copy()),
-                              shape=self.shape)
+                _data[d_start:d_end] = self.data[d_start:d_end] == d_max
+            ret = type(self)((_data, self.indices.copy(), self.indptr.copy()), shape=self.shape)
             ret.eliminate_zeros()
             return ret
 
     def count(self, axis=None):
-        if axis is None:
-            raise NotImplementedError
-        elif axis == 0:
+        if axis is None or axis == 0:
             raise NotImplementedError
         elif axis == 1:
             ret = self.indptr[1:] - self.indptr[:-1]
             return np.array(ret, ndmin=2).T
 
     def choose_random(self, axis=None):
-        if axis is None:
-            raise NotImplementedError
-        elif axis == 0:
+        if axis is None or axis == 0:
             raise NotImplementedError
         elif axis == 1:
             ret = self.copy()
@@ -158,8 +150,7 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
 
     def apply_func(self, func):
         ret = self.copy()
-        ret.data = np.fromiter((func(v) for v in self.data),
-                               self.data.dtype, count=len(self.data))
+        ret.data = np.fromiter((func(v) for v in self.data), self.data.dtype, count=len(self.data))
         return ret
 
     def threshold_filter(self, threshold):
@@ -171,10 +162,9 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
         return self.apply_func(lambda x: 1 if x > 0 else 0)
 
     def save(self, filename):
-        np.savez(filename, data=self.data, indices=self.indices,
-                 indptr=self.indptr, shape=self.shape)
+        np.savez(filename, data=self.data, indices=self.indices, indptr=self.indptr, shape=self.shape)
+
     @classmethod
     def load(cls, filename):
         loader = np.load(filename)
-        return cls((loader['data'], loader['indices'], loader['indptr']),
-                   shape = loader['shape'])
+        return cls((loader['data'], loader['indices'], loader['indptr']), shape=loader['shape'])

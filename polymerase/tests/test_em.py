@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tests for PolymeraseLikelihood EM algorithm and full pipeline baseline.
 
 Tests cover:
@@ -16,8 +15,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_almost_equal
 
-from polymerase.sparse.matrix import csr_matrix_plus
 from polymerase.core.likelihood import PolymeraseLikelihood
+from polymerase.sparse.matrix import csr_matrix_plus
 
 # Path to bundled test data
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
@@ -25,8 +24,10 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 
 # --- Mock opts for PolymeraseLikelihood ---
 
+
 class MockOpts:
     """Minimal options object for PolymeraseLikelihood."""
+
     def __init__(self, **kwargs):
         self.em_epsilon = kwargs.get('em_epsilon', 1e-7)
         self.max_iter = kwargs.get('max_iter', 100)
@@ -36,11 +37,12 @@ class MockOpts:
         self.exp_tag = kwargs.get('exp_tag', 'test')
 
     def outfile_path(self, suffix):
-        basename = '%s-%s' % (self.exp_tag, suffix)
+        basename = f'{self.exp_tag}-{suffix}'
         return os.path.join(self.outdir, basename)
 
 
 # --- Fixtures ---
+
 
 @pytest.fixture
 def simple_scores():
@@ -50,12 +52,15 @@ def simple_scores():
     # Fragment 1: maps to features 0 and 1 (ambiguous)
     # Fragment 2: maps to features 1 and 2 (ambiguous)
     # Fragment 3: maps to feature 2 only (unique)
-    return csr_matrix_plus([
-        [10,  0,  0],
-        [ 8,  6,  0],
-        [ 0,  7,  5],
-        [ 0,  0, 12],
-    ], dtype=np.float64)
+    return csr_matrix_plus(
+        [
+            [10, 0, 0],
+            [8, 6, 0],
+            [0, 7, 5],
+            [0, 0, 12],
+        ],
+        dtype=np.float64,
+    )
 
 
 @pytest.fixture
@@ -70,8 +75,8 @@ def simple_tl(simple_scores, simple_opts):
 
 # --- PolymeraseLikelihood initialization ---
 
-class TestPolymeraseLikelihoodInit:
 
+class TestPolymeraseLikelihoodInit:
     def test_dimensions(self, simple_tl):
         assert simple_tl.N == 4
         assert simple_tl.K == 3
@@ -94,17 +99,17 @@ class TestPolymeraseLikelihoodInit:
 
     def test_pi_init(self, simple_tl):
         """Initial pi should be uniform."""
-        assert_array_almost_equal(simple_tl.pi, [1./3, 1./3, 1./3])
+        assert_array_almost_equal(simple_tl.pi, [1.0 / 3, 1.0 / 3, 1.0 / 3])
 
     def test_theta_init(self, simple_tl):
         """Initial theta should be uniform."""
-        assert_array_almost_equal(simple_tl.theta, [1./3, 1./3, 1./3])
+        assert_array_almost_equal(simple_tl.theta, [1.0 / 3, 1.0 / 3, 1.0 / 3])
 
 
 # --- E-step ---
 
-class TestEStep:
 
+class TestEStep:
     def test_estep_returns_normalized(self, simple_tl):
         """E-step output rows should sum to 1."""
         z = simple_tl.estep(simple_tl.pi, simple_tl.theta)
@@ -127,8 +132,8 @@ class TestEStep:
 
 # --- M-step ---
 
-class TestMStep:
 
+class TestMStep:
     def test_mstep_pi_sums_near_one(self, simple_tl):
         """Pi estimates should approximately sum to 1."""
         z = simple_tl.estep(simple_tl.pi, simple_tl.theta)
@@ -150,8 +155,8 @@ class TestMStep:
 
 # --- EM convergence ---
 
-class TestEMConvergence:
 
+class TestEMConvergence:
     def test_em_converges(self, simple_tl):
         """EM should converge without error."""
         simple_tl.em()
@@ -183,9 +188,7 @@ class TestEMConvergence:
 
     def test_em_max_iter(self):
         """EM should stop at max_iter."""
-        scores = csr_matrix_plus([
-            [10, 8], [8, 10], [5, 5]
-        ], dtype=np.float64)
+        scores = csr_matrix_plus([[10, 8], [8, 10], [5, 5]], dtype=np.float64)
         opts = MockOpts(max_iter=3, em_epsilon=1e-20)
         tl = PolymeraseLikelihood(scores, opts)
         tl.em()
@@ -195,8 +198,8 @@ class TestEMConvergence:
 
 # --- Reassignment modes ---
 
-class TestReassignment:
 
+class TestReassignment:
     @pytest.fixture(autouse=True)
     def setup_tl(self, simple_scores, simple_opts):
         self.tl = PolymeraseLikelihood(simple_scores, simple_opts)
@@ -259,6 +262,7 @@ class TestReassignment:
 
 # --- Full pipeline baseline test ---
 
+
 class TestBaselineEquivalence:
     """Golden baseline: verify the full pipeline produces expected results
     on the bundled test data.
@@ -269,14 +273,14 @@ class TestBaselineEquivalence:
     @pytest.fixture(autouse=True)
     def setup_pipeline(self):
         """Load bundled test data and run EM."""
-        from polymerase.core.model import Polymerase
         from polymerase.annotation import get_annotation_class
+        from polymerase.core.model import Polymerase
 
         samfile = os.path.join(DATA_DIR, 'alignment.bam')
         gtffile = os.path.join(DATA_DIR, 'annotation.gtf')
 
         if not os.path.exists(samfile) or not os.path.exists(gtffile):
-            pytest.skip("Bundled test data not found")
+            pytest.skip('Bundled test data not found')
 
         # Create mock opts matching default CLI
         opts = MockOpts()
@@ -317,8 +321,9 @@ class TestBaselineEquivalence:
     def test_golden_log_likelihood(self):
         """Log-likelihood should match the known golden value."""
         expected_lnl = 95252.596293
-        assert self.tl.lnl == pytest.approx(expected_lnl, rel=1e-4), \
+        assert self.tl.lnl == pytest.approx(expected_lnl, rel=1e-4), (
             f"Log-likelihood {self.tl.lnl} doesn't match expected {expected_lnl}"
+        )
 
     def test_pipeline_shape(self):
         """Matrix dimensions should match test data expectations."""
@@ -334,8 +339,8 @@ class TestBaselineEquivalence:
         for mode in modes:
             np.random.seed(42)
             result = self.tl.reassign(mode, 0.9)
-            assert result.shape == self.tl.Q.shape, f"Mode {mode} shape mismatch"
-            assert np.all(np.isfinite(result.data)), f"Mode {mode} has non-finite values"
+            assert result.shape == self.tl.Q.shape, f'Mode {mode} shape mismatch'
+            assert np.all(np.isfinite(result.data)), f'Mode {mode} has non-finite values'
 
     def test_convergence_reached(self):
         """EM should converge (not just hit max_iter)."""

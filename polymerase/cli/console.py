@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -21,7 +19,7 @@ class Stopwatch:
     """Collects named timing segments for a benchmark summary."""
 
     def __init__(self):
-        self._timings = []        # [(name, elapsed, level)]
+        self._timings = []  # [(name, elapsed, level)]
         self._start = None
         self._active = None
 
@@ -29,8 +27,7 @@ class Stopwatch:
         """Begin timing a named stage. level=0 top-level, 1 sub-stage."""
         now = perf_counter()
         if self._active:
-            self._timings.append(
-                (self._active[0], now - self._active[1], self._active[2]))
+            self._timings.append((self._active[0], now - self._active[1], self._active[2]))
         self._active = (name, now, level)
         if self._start is None:
             self._start = now
@@ -39,8 +36,7 @@ class Stopwatch:
         """Stop the current segment."""
         if self._active:
             now = perf_counter()
-            self._timings.append(
-                (self._active[0], now - self._active[1], self._active[2]))
+            self._timings.append((self._active[0], now - self._active[1], self._active[2]))
             self._active = None
 
     @property
@@ -71,20 +67,16 @@ class Console:
             return
         self._write('')
         if self._use_color:
-            self._write(
-                '\033[1mPolymerase v{}\033[0m'
-                ' \u2014 Transposable Element Expression'.format(version))
+            self._write(f'\033[1mPolymerase v{version}\033[0m \u2014 Transposable Element Expression')
         else:
-            self._write(
-                'Polymerase v{}'
-                ' -- Transposable Element Expression'.format(version))
+            self._write(f'Polymerase v{version} -- Transposable Element Expression')
         self._write('')
 
     def section(self, title):
         """Print indented section header."""
         if self.level < self.NORMAL:
             return
-        self._write('  {}'.format(title))
+        self._write(f'  {title}')
 
     def item(self, label, value, indent=4):
         """Print key: value pair."""
@@ -97,33 +89,33 @@ class Console:
         """Print a status message at normal level."""
         if self.level < self.NORMAL:
             return
-        self._write('  {}'.format(message))
+        self._write(f'  {message}')
 
     def detail(self, message):
         """Print indented detail at normal level."""
         if self.level < self.NORMAL:
             return
-        self._write('    {}'.format(message))
+        self._write(f'    {message}')
 
     def verbose(self, message):
         """Print only in verbose/debug mode."""
         if self.level < self.VERBOSE:
             return
-        self._write('    {}'.format(message))
+        self._write(f'    {message}')
 
     def plugin(self, name, description, version=None):
         """Print loaded plugin line."""
         if self.level < self.NORMAL:
             return
         check = '\u2713' if self._use_color else '*'
-        ver = ' v{}'.format(version) if version else ''
-        self._write('    {} {}{} \u2014 {}'.format(check, name, ver, description))
+        ver = f' v{version}' if version else ''
+        self._write(f'    {check} {name}{ver} \u2014 {description}')
 
     def output_file(self, path):
         """Print an output file path."""
         if self.level < self.NORMAL:
             return
-        self._write('    {}'.format(path))
+        self._write(f'    {path}')
 
     def blank(self):
         """Print a blank line."""
@@ -146,19 +138,17 @@ class Console:
                 continue
             indent = '      ' if level > 0 else '    '
             if level == 0 and total > 0:
-                pct = '{:>4.0f}%'.format(elapsed / total * 100)
+                pct = f'{elapsed / total * 100:>4.0f}%'
             else:
                 pct = ''
-            self._write('{}{:<18}{:>5.1f}s{:>8}'.format(
-                indent, name, elapsed, pct))
+            self._write(f'{indent}{name:<18}{elapsed:>5.1f}s{pct:>8}')
 
         # Overhead = total - sum of top-level stages
-        top_sum = sum(e for _, e, l in timings if l == 0)
+        top_sum = sum(e for _, e, lvl in timings if lvl == 0)
         overhead = total - top_sum
         if overhead > 0.01:
-            pct = '{:>4.0f}%'.format(overhead / total * 100)
-            self._write('    {:<18}{:>5.1f}s{:>8}'.format(
-                'Overhead', overhead, pct))
+            pct = f'{overhead / total * 100:>4.0f}%'
+            self._write('    {:<18}{:>5.1f}s{:>8}'.format('Overhead', overhead, pct))
 
         self._write('    ' + '\u2500' * 30)
         self._write('    {:<18}{:>5.1f}s'.format('Total', total))

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -12,6 +10,7 @@ Validates bitwise equivalence between csr_matrix_plus and
 CpuOptimizedCsrMatrix for binmax, threshold_filter, indicator,
 and determinism for choose_random.
 """
+
 import os
 
 import numpy as np
@@ -24,15 +23,13 @@ numba = pytest.importorskip('numba')
 from polymerase.sparse.numba_matrix import CpuOptimizedCsrMatrix  # noqa: E402
 
 # Path to bundled test data
-DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data'
-)
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 
 
 # --- Fixtures ---
 
-@pytest.fixture(params=[csr_matrix_plus, CpuOptimizedCsrMatrix],
-                ids=['stock', 'optimized'])
+
+@pytest.fixture(params=[csr_matrix_plus, CpuOptimizedCsrMatrix], ids=['stock', 'optimized'])
 def matrix_class(request):
     """Parametrized fixture to test both sparse matrix classes."""
     return request.param
@@ -60,8 +57,8 @@ def m_single_element(matrix_class):
 
 # --- binmax equivalence ---
 
-class TestBinmaxEquivalence:
 
+class TestBinmaxEquivalence:
     def test_binmax_standard(self, m3x3):
         result = m3x3.binmax(1)
         expected = np.array([[0, 0, 1], [0, 0, 1], [0, 0, 1]], dtype=np.int8)
@@ -87,8 +84,7 @@ class TestBinmaxCrossTier:
     """Verify stock and optimized produce identical results."""
 
     def test_cross_tier_equivalence(self):
-        data = np.array([[10.0, 0, 20], [0, 0, 30], [40, 50, 60],
-                         [5, 5, 0], [0, 0, 0], [7, 0, 3]])
+        data = np.array([[10.0, 0, 20], [0, 0, 30], [40, 50, 60], [5, 5, 0], [0, 0, 0], [7, 0, 3]])
         stock = csr_matrix_plus(data).binmax(1)
         optimized = CpuOptimizedCsrMatrix(data).binmax(1)
         assert_array_almost_equal(stock.toarray(), optimized.toarray())
@@ -96,8 +92,8 @@ class TestBinmaxCrossTier:
 
 # --- threshold_filter equivalence ---
 
-class TestThresholdFilter:
 
+class TestThresholdFilter:
     def test_threshold_filter(self, m3x3):
         result = m3x3.threshold_filter(3.0)
         expected = np.array([[0, 0, 0], [0, 0, 3], [4, 5, 6]])
@@ -115,7 +111,6 @@ class TestThresholdFilter:
 
 
 class TestThresholdFilterCrossTier:
-
     def test_cross_tier_equivalence(self):
         data = np.array([[0.1, 0, 0.9], [0.5, 0.5, 0], [0, 0, 0.3]])
         stock = csr_matrix_plus(data).threshold_filter(0.5)
@@ -125,8 +120,8 @@ class TestThresholdFilterCrossTier:
 
 # --- indicator equivalence ---
 
-class TestIndicator:
 
+class TestIndicator:
     def test_indicator(self, m3x3):
         result = m3x3.indicator()
         expected = np.array([[1, 0, 1], [0, 0, 1], [1, 1, 1]], dtype=np.uint8)
@@ -139,7 +134,6 @@ class TestIndicator:
 
 
 class TestIndicatorCrossTier:
-
     def test_cross_tier_equivalence(self):
         data = np.array([[0.1, 0, 0.9], [0.5, 0.5, 0], [0, 0, 0]])
         stock = csr_matrix_plus(data).indicator()
@@ -149,8 +143,8 @@ class TestIndicatorCrossTier:
 
 # --- choose_random determinism ---
 
-class TestChooseRandom:
 
+class TestChooseRandom:
     def test_deterministic_with_seed(self, matrix_class):
         m = matrix_class([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
         np.random.seed(123)
@@ -178,8 +172,8 @@ class TestChooseRandom:
 
 # --- Type preservation ---
 
-class TestTypePreservation:
 
+class TestTypePreservation:
     def test_binmax_preserves_type(self):
         m = CpuOptimizedCsrMatrix([[1.0, 2.0], [3.0, 4.0]])
         result = m.binmax(1)

@@ -1,30 +1,28 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-import re
-from collections import defaultdict, namedtuple, Counter, OrderedDict
 import logging as lg
 import pickle
-
+import re
+from collections import Counter, OrderedDict, defaultdict, namedtuple
 
 from intervaltree import Interval, IntervalTree
 
+GTFRow = namedtuple('GTFRow', ['chrom', 'source', 'feature', 'start', 'end', 'score', 'strand', 'frame', 'attribute'])
 
-GTFRow = namedtuple('GTFRow', ['chrom','source','feature','start','end','score','strand','frame','attribute'])
 
-def overlap_length(a,b):
-    return max(0, min(a.end,b.end) - max(a.begin,b.begin))
+def overlap_length(a, b):
+    return max(0, min(a.end, b.end) - max(a.begin, b.begin))
+
 
 def merge_intervals(a, b, d=None):
-    return Interval(min(a.begin,b.begin), max(a.end,b.end), d)
+    return Interval(min(a.begin, b.begin), max(a.end, b.end), d)
 
-class _AnnotationIntervalTree(object):
 
+class _AnnotationIntervalTree:
     def __init__(self, gtf_file, attribute_name, stranded_mode, feature_type='exon'):
         lg.debug('Using intervaltree for annotation.')
         self.loci = OrderedDict()
@@ -33,36 +31,40 @@ class _AnnotationIntervalTree(object):
         self.run_stranded = stranded_mode is not None and stranded_mode != 'None'
 
         # GTF filehandle
-        fh = open(gtf_file,'r') if isinstance(gtf_file,str) else gtf_file
-        for rownum, l in enumerate(fh):
-            if l.startswith('#'): continue
-            f = GTFRow(*l.strip('\n').split('\t'))
-            if f.feature != feature_type: continue
+        fh = open(gtf_file) if isinstance(gtf_file, str) else gtf_file  # noqa: SIM115
+        for rownum, line in enumerate(fh):
+            if line.startswith('#'):
+                continue
+            f = GTFRow(*line.strip('\n').split('\t'))
+            if f.feature != feature_type:
+                continue
             attr = dict(re.findall(r'(\w+)\s+"(.+?)";', f.attribute))
             attr['strand'] = f.strand
             if self.key not in attr:
-                lg.warning('Skipping row %d: missing attribute "%s"' % (rownum, self.key))
+                lg.warning(f'Skipping row {rownum}: missing attribute "{self.key}"')
                 continue
 
-            ''' Add to locus list '''
+            """ Add to locus list """
             if attr[self.key] not in self.loci:
                 self.loci[attr[self.key]] = list()
             self.loci[attr[self.key]].append(f)
-            ''' Add to interval tree '''
-            new_iv = Interval(int(f.start), int(f.end)+1, attr)
+            """ Add to interval tree """
+            new_iv = Interval(int(f.start), int(f.end) + 1, attr)
             # Merge overlapping intervals from same locus
             if True:
                 overlap = self.itree[f.chrom].overlap(new_iv)
                 if len(overlap) > 0:
-                    mergeable = [iv for iv in overlap if iv.data[self.key]==attr[self.key]]
+                    mergeable = [iv for iv in overlap if iv.data[self.key] == attr[self.key]]
                     if mergeable:
-                        assert len(mergeable) == 1, "Error"
-                        new_iv = merge_intervals(mergeable[0], new_iv, {self.key: attr[self.key], 'strand': attr['strand']})
+                        assert len(mergeable) == 1, 'Error'
+                        new_iv = merge_intervals(
+                            mergeable[0], new_iv, {self.key: attr[self.key], 'strand': attr['strand']}
+                        )
                         self.itree[f.chrom].remove(mergeable[0])
             self.itree[f.chrom].add(new_iv)
 
     def feature_length(self):
-        """ Get feature lengths
+        """Get feature lengths
 
         Returns:
             (dict of str: int): Feature names to feature lengths
@@ -94,7 +96,7 @@ class _AnnotationIntervalTree(object):
         for b_start, b_end in blocks:
             query = Interval(b_start, (b_end + 1))
             for iv in self.itree[ref].overlap(query):
-                if self.run_stranded == True:
+                if self.run_stranded:
                     if iv.data['strand'] == frag_strand:
                         _result[iv.data[self.key]] += overlap_length(iv, query)
                 else:
@@ -103,11 +105,14 @@ class _AnnotationIntervalTree(object):
 
     def save(self, filename):
         with open(filename, 'wb') as outh:
-            pickle.dump({
-                'key': self.key,
-                'loci': self.loci,
-                'itree': self.itree,
-            }, outh)
+            pickle.dump(
+                {
+                    'key': self.key,
+                    'loci': self.loci,
+                    'itree': self.itree,
+                },
+                outh,
+            )
 
     @classmethod
     def load(cls, filename):

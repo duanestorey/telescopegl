@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -11,9 +9,9 @@
 Reads the assign primer's counts TSV and the original GTF to map each locus
 to its ``repFamily`` and ``repClass`` attributes, then sums counts.
 """
-import os
+
 import logging as lg
-from collections import defaultdict
+import os
 
 import pandas as pd
 
@@ -66,66 +64,63 @@ class FamilyAggCofactor(Cofactor):
 
     @property
     def name(self) -> str:
-        return "family-agg"
+        return 'family-agg'
 
     @property
     def primer_name(self) -> str:
-        return "assign"
+        return 'assign'
 
     @property
     def description(self) -> str:
-        return "Aggregate TE counts by repFamily and repClass"
+        return 'Aggregate TE counts by repFamily and repClass'
 
     def configure(self, opts, compute) -> None:
         self._gtf_path = getattr(opts, 'gtffile', None)
         self._attribute = getattr(opts, 'attribute', 'locus')
 
-    def transform(self, primer_output_dir, output_dir, exp_tag, console=None,
-                  stopwatch=None) -> None:
+    def transform(self, primer_output_dir, output_dir, exp_tag, console=None, stopwatch=None) -> None:
         # Find assign counts file
-        counts_file = os.path.join(primer_output_dir, '%s-TE_counts.tsv' % exp_tag)
+        counts_file = os.path.join(primer_output_dir, f'{exp_tag}-TE_counts.tsv')
         if not os.path.exists(counts_file):
-            lg.warning("family-agg: counts file not found at {}".format(counts_file))
+            lg.warning(f'family-agg: counts file not found at {counts_file}')
             return
 
         if not self._gtf_path or not os.path.exists(self._gtf_path):
-            lg.warning("family-agg: GTF file not available, skipping")
+            lg.warning('family-agg: GTF file not available, skipping')
             return
 
         # Load counts
         counts = pd.read_csv(counts_file, sep='\t')
         if 'transcript' not in counts.columns or 'count' not in counts.columns:
-            lg.warning("family-agg: unexpected counts format")
+            lg.warning('family-agg: unexpected counts format')
             return
 
         # Build locus -> family/class mapping
         meta = _build_locus_metadata(self._gtf_path, self._attribute)
 
         # Add family/class columns
-        counts['repFamily'] = counts['transcript'].map(
-            lambda t: meta.get(t, {}).get('repFamily', 'Unknown'))
-        counts['repClass'] = counts['transcript'].map(
-            lambda t: meta.get(t, {}).get('repClass', 'Unknown'))
+        counts['repFamily'] = counts['transcript'].map(lambda t: meta.get(t, {}).get('repFamily', 'Unknown'))
+        counts['repClass'] = counts['transcript'].map(lambda t: meta.get(t, {}).get('repClass', 'Unknown'))
 
         # Aggregate by family
         family_counts = counts.groupby('repFamily')['count'].sum().reset_index()
         family_counts.columns = ['repFamily', 'count']
         family_counts.sort_values('repFamily', inplace=True)
 
-        family_name = '%s-family_counts.tsv' % exp_tag
+        family_name = f'{exp_tag}-family_counts.tsv'
         family_file = os.path.join(output_dir, family_name)
         family_counts.to_csv(family_file, sep='\t', index=False)
-        lg.info("family-agg: wrote {}".format(family_file))
+        lg.info(f'family-agg: wrote {family_file}')
 
         # Aggregate by class
         class_counts = counts.groupby('repClass')['count'].sum().reset_index()
         class_counts.columns = ['repClass', 'count']
         class_counts.sort_values('repClass', inplace=True)
 
-        class_name = '%s-class_counts.tsv' % exp_tag
+        class_name = f'{exp_tag}-class_counts.tsv'
         class_file = os.path.join(output_dir, class_name)
         class_counts.to_csv(class_file, sep='\t', index=False)
-        lg.info("family-agg: wrote {}".format(class_file))
+        lg.info(f'family-agg: wrote {class_file}')
 
         if console:
-            console.detail('family-agg \u2192 {}, {}'.format(family_name, class_name))
+            console.detail(f'family-agg \u2192 {family_name}, {class_name}')

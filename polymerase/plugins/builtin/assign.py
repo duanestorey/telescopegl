@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -12,14 +10,15 @@ This is the original Telescope/Polymerase pipeline refactored as a primer.
 It receives annotation and alignment snapshots from the platform, runs the
 EM algorithm, and writes stats + counts reports.
 """
-import os
+
 import logging as lg
+import os
 from time import time
 
 import numpy as np
 
-from ..abc import Primer
 from ...utils.helpers import format_minutes as fmtmins
+from ..abc import Primer
 
 
 class AssignPrimer(Primer):
@@ -27,15 +26,15 @@ class AssignPrimer(Primer):
 
     @property
     def name(self) -> str:
-        return "assign"
+        return 'assign'
 
     @property
     def description(self) -> str:
-        return "Quantify TE expression using Expectation-Maximization"
+        return 'Quantify TE expression using Expectation-Maximization'
 
     @property
     def version(self) -> str:
-        return "2.0.1"
+        return '2.0.1'
 
     def configure(self, opts, compute) -> None:
         self._opts = opts
@@ -54,13 +53,13 @@ class AssignPrimer(Primer):
         from ...core.reporter import output_report, update_sam
 
         if self._alignment is None:
-            lg.warning("assign primer: no alignment data, skipping")
+            lg.warning('assign primer: no alignment data, skipping')
             return
 
         opts = self._opts
 
         if getattr(opts, 'skip_em', False):
-            lg.info("Skipping EM...")
+            lg.info('Skipping EM...')
             if console:
                 console.detail('Skipping EM (--skip_em)')
             return
@@ -69,7 +68,7 @@ class AssignPrimer(Primer):
         shape = self._alignment.shape
         total_frags = self._alignment.run_info['total_fragments']
         seed = (total_frags % (shape[0] * shape[1])) % 4294967295
-        lg.debug("Random seed: {}".format(seed))
+        lg.debug(f'Random seed: {seed}')
         np.random.seed(seed)
 
         # Create likelihood model
@@ -87,22 +86,21 @@ class AssignPrimer(Primer):
         _em_elapsed = time() - stime
         if stopwatch:
             stopwatch.stop()
-        lg.info("EM completed in %s" % fmtmins(_em_elapsed))
+        lg.info(f'EM completed in {fmtmins(_em_elapsed)}')
 
         if console:
             _con = 'converged' if ts_model.num_iterations < opts.max_iter else 'terminated'
-            console.detail('EM {} after {} iterations ({:.2f}s)'.format(
-                _con, ts_model.num_iterations, _em_elapsed))
-            console.detail('Final log-likelihood: {:,.2f}'.format(ts_model.lnl))
+            console.detail(f'EM {_con} after {ts_model.num_iterations} iterations ({_em_elapsed:.2f}s)')
+            console.detail(f'Final log-likelihood: {ts_model.lnl:,.2f}')
 
         # Generate report
-        lg.info("Generating Report...")
+        lg.info('Generating Report...')
         if stopwatch:
             stopwatch.start('Report')
         if console:
             console.detail('Generating report... done')
-        stats_file = os.path.join(output_dir, '%s-run_stats.tsv' % exp_tag)
-        counts_file = os.path.join(output_dir, '%s-TE_counts.tsv' % exp_tag)
+        stats_file = os.path.join(output_dir, f'{exp_tag}-run_stats.tsv')
+        counts_file = os.path.join(output_dir, f'{exp_tag}-TE_counts.tsv')
 
         output_report(
             self._alignment.feat_index,
@@ -121,8 +119,8 @@ class AssignPrimer(Primer):
         if getattr(opts, 'updated_sam', False):
             tmp_bam = getattr(opts, '_tmp_bam_path', None)
             if tmp_bam and os.path.exists(tmp_bam):
-                lg.info("Creating updated SAM file...")
-                updated_file = os.path.join(output_dir, '%s-updated.bam' % exp_tag)
+                lg.info('Creating updated SAM file...')
+                updated_file = os.path.join(output_dir, f'{exp_tag}-updated.bam')
                 update_sam(
                     tmp_bam,
                     self._alignment.read_index,

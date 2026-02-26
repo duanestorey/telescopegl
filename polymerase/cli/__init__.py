@@ -1,15 +1,14 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-import yaml
+import argparse
 import logging
 from collections import OrderedDict
-import argparse
+
+import yaml
 
 from .console import Console
 
@@ -24,7 +23,7 @@ _SAFE_TYPES = {
 }
 
 
-class SubcommandOptions(object):
+class SubcommandOptions:
     OPTS = """
     - Input Options:
         - infile:
@@ -57,16 +56,16 @@ class SubcommandOptions(object):
                 if _d.pop('positional', False):
                     _arg_name = arg_name
                 elif len(arg_name) == 1:
-                    _arg_name = '-{}'.format(arg_name)
+                    _arg_name = f'-{arg_name}'
                 else:
-                    _arg_name = '--{}'.format(arg_name)
+                    _arg_name = f'--{arg_name}'
 
                 if 'type' in _d:
                     _type_str = _d['type']
                     if _type_str not in _SAFE_TYPES:
                         raise ValueError(
-                            "Unsupported type '{}' in CLI option '{}'. "
-                            "Allowed: {}".format(_type_str, arg_name, list(_SAFE_TYPES.keys()))
+                            f"Unsupported type '{_type_str}' in CLI option '{arg_name}'. "
+                            f'Allowed: {list(_SAFE_TYPES.keys())}'
                         )
                     _d['type'] = _SAFE_TYPES[_type_str]
 
@@ -90,10 +89,10 @@ class SubcommandOptions(object):
         if hasattr(self, 'version'):
             ret.append('{:34}{}'.format('Version:', self.version))
         for group_name, args in self.opt_groups.items():
-            ret.append('{}'.format(group_name))
-            for arg_name in args.keys():
-                v = getattr(self, arg_name, "Not set")
-                v  = getattr(v, 'name') if hasattr(v, 'name') else v
+            ret.append(f'{group_name}')
+            for arg_name in args:
+                v = getattr(self, arg_name, 'Not set')
+                v = v.name if hasattr(v, 'name') else v
                 ret.append('    {:30}{}'.format(arg_name + ':', v))
         return '\n'.join(ret)
 
@@ -132,12 +131,10 @@ def configure_logging(opts):
         loglev = logging.WARNING
         logfmt = '%(asctime)s %(levelname)-8s %(message)s'
 
-    logging.basicConfig(level=loglev,
-                        format=logfmt,
-                        datefmt='%Y-%m-%d %H:%M:%S',
-                        stream=opts.logfile)
+    logging.basicConfig(level=loglev, format=logfmt, datefmt='%Y-%m-%d %H:%M:%S', stream=opts.logfile)
 
     return Console(level=console_level)
+
 
 # A very large integer
 BIG_INT = 2**32 - 1

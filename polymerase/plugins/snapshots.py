@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -17,8 +15,9 @@ class AnnotationSnapshot:
 
     Passed to :meth:`Primer.on_annotation_loaded`.
     """
-    loci: dict                    # {locus_name: [GTFRow, ...]}
-    feature_lengths: dict         # {locus_name: int}
+
+    loci: dict  # {locus_name: [GTFRow, ...]}
+    feature_lengths: dict  # {locus_name: int}
     num_features: int
     gtf_path: str
     attribute_name: str
@@ -30,10 +29,11 @@ class AlignmentSnapshot:
 
     Passed to :meth:`Primer.on_matrix_built`.
     """
-    bam_path: str                 # primers needing BAM open their own handle
-    run_info: dict                # alignment stats (total reads, overlaps, etc.)
-    read_index: dict              # {fragment_name: row_index}
-    feat_index: dict              # {feature_name: col_index}
-    shape: tuple                  # (N_fragments, K_features)
-    raw_scores: object            # CSR sparse matrix (read-only by convention)
-    feature_lengths: dict         # {feature_name: length_bp}
+
+    bam_path: str  # primers needing BAM open their own handle
+    run_info: dict  # alignment stats (total reads, overlaps, etc.)
+    read_index: dict  # {fragment_name: row_index}
+    feat_index: dict  # {feature_name: col_index}
+    shape: tuple  # (N_fragments, K_features)
+    raw_scores: object  # CSR sparse matrix (read-only by convention)
+    feature_lengths: dict  # {feature_name: length_bp}

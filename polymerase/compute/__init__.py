@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -37,6 +35,8 @@ def get_ops() -> ComputeOps:
     backend = get_backend()
     if getattr(backend, 'has_cupy', False):
         from .gpu_ops import GpuOps
+
         return GpuOps()
     from .cpu_ops import CpuOps
+
     return CpuOps()

@@ -1,29 +1,22 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-""" Polymerase resume
+"""Polymerase resume"""
 
-"""
-import sys
+import logging as lg
 import os
 from time import time
-import logging as lg
-import gc
-
-import numpy as np
-
-from . import configure_logging
-from .console import Stopwatch
-from ..utils.helpers import format_minutes as fmtmins
 
 from ..core.model import Polymerase, scPolymerase
-from .assign import IDOptions
 from ..sparse import backend
+from ..utils.helpers import format_minutes as fmtmins
+from . import configure_logging
+from .assign import IDOptions
+from .console import Stopwatch
+
 
 class BulkResumeOptions(IDOptions):
     OPTS = """
@@ -109,8 +102,8 @@ class BulkResumeOptions(IDOptions):
             help: Decompose into independent blocks and solve in parallel.
     """
 
-class scResumeOptions(IDOptions):
 
+class scResumeOptions(IDOptions):
     OPTS = """
     - Input Options:
         - checkpoint:
@@ -194,6 +187,7 @@ class scResumeOptions(IDOptions):
             help: Decompose into independent blocks and solve in parallel.
     """
 
+
 def run(args, sc=True):
     """Resume from checkpoint: load saved matrix and run EM via primers.
 
@@ -201,15 +195,15 @@ def run(args, sc=True):
         args: Parsed argparse namespace.
         sc: True for single-cell mode.
     """
-    from ..plugins.snapshots import AlignmentSnapshot
-    from ..plugins.registry import PluginRegistry
     from ..compute import get_ops
+    from ..plugins.registry import PluginRegistry
+    from ..plugins.snapshots import AlignmentSnapshot
 
     option_class = scResumeOptions if sc else BulkResumeOptions
     opts = option_class(args, sc=sc)
     console = configure_logging(opts)
     backend.configure()
-    lg.info('\n{}\n'.format(opts))
+    lg.info(f'\n{opts}\n')
     total_time = time()
 
     # Banner
@@ -218,6 +212,7 @@ def run(args, sc=True):
     console.section('Input')
     console.item('Checkpoint', os.path.basename(opts.checkpoint))
     from .assign import _backend_display_name
+
     console.item('Backend', _backend_display_name(backend.get_backend()))
     console.blank()
 
@@ -239,9 +234,8 @@ def run(args, sc=True):
     _ambig = int(_ri.get('overlap_ambig', 0))
     _overlap = _unique + _ambig
 
-    console.status('Loaded checkpoint ({:.1f}s)'.format(_load_elapsed))
-    console.detail('{:,} overlap annotation ({:,} unique, {:,} ambiguous)'.format(
-        _overlap, _unique, _ambig))
+    console.status(f'Loaded checkpoint ({_load_elapsed:.1f}s)')
+    console.detail(f'{_overlap:,} overlap annotation ({_unique:,} unique, {_ambig:,} ambiguous)')
     console.blank()
 
     # Build alignment snapshot from checkpoint
@@ -274,16 +268,15 @@ def run(args, sc=True):
 
     registry.notify('on_matrix_built', alignment_snapshot)
     os.makedirs(opts.outdir, exist_ok=True)
-    registry.commit_all(opts.outdir, opts.exp_tag, console=console,
-                        stopwatch=sw)
+    registry.commit_all(opts.outdir, opts.exp_tag, console=console, stopwatch=sw)
 
     # Output file summary
     from .assign import _collect_output_files
+
     _output_files = _collect_output_files(opts.outdir)
     if _output_files:
         console.blank()
-        console.section('Output ({} files in {})'.format(
-            len(_output_files), opts.outdir + '/'))
+        console.section('Output ({} files in {})'.format(len(_output_files), opts.outdir + '/'))
         for f in _output_files:
             console.output_file(f)
 
@@ -293,6 +286,6 @@ def run(args, sc=True):
 
     # Completion
     console.blank()
-    console.status('Completed in {:.1f}s'.format(time() - total_time))
+    console.status(f'Completed in {time() - total_time:.1f}s')
     console.blank()
-    lg.info("polymerase resume complete (%s)" % fmtmins(time() - total_time))
+    lg.info(f'polymerase resume complete ({fmtmins(time() - total_time)})')

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -8,6 +6,6 @@
 
 """Plugin infrastructure for Polymerase primers and cofactors."""
 
-from .abc import Primer, Cofactor  # noqa: F401
-from .snapshots import AnnotationSnapshot, AlignmentSnapshot  # noqa: F401
+from .abc import Cofactor, Primer  # noqa: F401
 from .registry import PluginRegistry  # noqa: F401
+from .snapshots import AlignmentSnapshot, AnnotationSnapshot  # noqa: F401

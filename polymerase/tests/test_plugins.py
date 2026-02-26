@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -12,17 +10,16 @@ import os
 import tempfile
 
 import pytest
-import numpy as np
 import scipy.sparse
 
-from polymerase.plugins.abc import Primer, Cofactor
-from polymerase.plugins.snapshots import AnnotationSnapshot, AlignmentSnapshot
+from polymerase.plugins.abc import Cofactor, Primer
 from polymerase.plugins.registry import PluginRegistry
-
+from polymerase.plugins.snapshots import AlignmentSnapshot, AnnotationSnapshot
 
 # =========================================================================
 # ABC enforcement
 # =========================================================================
+
 
 class TestPrimerABC:
     def test_cannot_instantiate_bare(self):
@@ -34,21 +31,25 @@ class TestPrimerABC:
         class MyPrimer(Primer):
             @property
             def name(self):
-                return "test"
+                return 'test'
+
             def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
+
         p = MyPrimer()
-        assert p.name == "test"
-        assert p.version == "0.0.0"
+        assert p.name == 'test'
+        assert p.version == '0.0.0'
         assert p.cli_options() is None
 
     def test_hooks_are_optional(self):
         class MinimalPrimer(Primer):
             @property
             def name(self):
-                return "minimal"
+                return 'minimal'
+
             def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
+
         p = MinimalPrimer()
         # Should not raise
         p.on_annotation_loaded(None)
@@ -64,26 +65,33 @@ class TestCofactorABC:
         class MyCofactor(Cofactor):
             @property
             def name(self):
-                return "test-cof"
+                return 'test-cof'
+
             @property
             def primer_name(self):
-                return "test"
+                return 'test'
+
             def transform(self, primer_output_dir, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
+
         c = MyCofactor()
-        assert c.name == "test-cof"
-        assert c.primer_name == "test"
+        assert c.name == 'test-cof'
+        assert c.primer_name == 'test'
 
 
 # =========================================================================
 # Snapshot immutability
 # =========================================================================
 
+
 class TestSnapshots:
     def test_annotation_snapshot_frozen(self):
         snap = AnnotationSnapshot(
-            loci={'A': []}, feature_lengths={'A': 100},
-            num_features=1, gtf_path='/tmp/test.gtf', attribute_name='locus',
+            loci={'A': []},
+            feature_lengths={'A': 100},
+            num_features=1,
+            gtf_path='/tmp/test.gtf',
+            attribute_name='locus',
         )
         with pytest.raises(AttributeError):
             snap.num_features = 42
@@ -91,17 +99,24 @@ class TestSnapshots:
     def test_alignment_snapshot_frozen(self):
         m = scipy.sparse.csr_matrix((3, 4))
         snap = AlignmentSnapshot(
-            bam_path='/tmp/test.bam', run_info={'total_fragments': 100},
-            read_index={'r1': 0}, feat_index={'f1': 0},
-            shape=(3, 4), raw_scores=m, feature_lengths={'f1': 500},
+            bam_path='/tmp/test.bam',
+            run_info={'total_fragments': 100},
+            read_index={'r1': 0},
+            feat_index={'f1': 0},
+            shape=(3, 4),
+            raw_scores=m,
+            feature_lengths={'f1': 500},
         )
         with pytest.raises(AttributeError):
             snap.shape = (10, 20)
 
     def test_annotation_snapshot_fields(self):
         snap = AnnotationSnapshot(
-            loci={'A': [1, 2]}, feature_lengths={'A': 100},
-            num_features=1, gtf_path='/tmp/test.gtf', attribute_name='locus',
+            loci={'A': [1, 2]},
+            feature_lengths={'A': 100},
+            num_features=1,
+            gtf_path='/tmp/test.gtf',
+            attribute_name='locus',
         )
         assert snap.num_features == 1
         assert snap.gtf_path == '/tmp/test.gtf'
@@ -111,6 +126,7 @@ class TestSnapshots:
 # =========================================================================
 # Registry
 # =========================================================================
+
 
 class TestRegistry:
     def test_discover_finds_assign(self):
@@ -156,9 +172,11 @@ class TestRegistry:
         class SpyPrimer(Primer):
             @property
             def name(self):
-                return "spy"
+                return 'spy'
+
             def on_matrix_built(self, snapshot):
                 received.append(snapshot)
+
             def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
 
@@ -169,13 +187,16 @@ class TestRegistry:
 
     def test_configure_all_passes_opts(self):
         """configure_all should call configure on each plugin."""
+
         class ReceiverPrimer(Primer):
             @property
             def name(self):
-                return "receiver"
+                return 'receiver'
+
             def configure(self, opts, compute):
                 self.received_opts = opts
                 self.received_compute = compute
+
             def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
                 pass
 
@@ -188,12 +209,14 @@ class TestRegistry:
 
     def test_commit_all_handles_failure_gracefully(self):
         """A failing primer should log a warning, not crash."""
+
         class FailPrimer(Primer):
             @property
             def name(self):
-                return "fail"
+                return 'fail'
+
             def commit(self, output_dir, exp_tag, console=None, stopwatch=None):
-                raise RuntimeError("intentional failure")
+                raise RuntimeError('intentional failure')
 
         reg = PluginRegistry()
         reg._primers = [FailPrimer()]
@@ -206,20 +229,22 @@ class TestRegistry:
 # Built-in assign primer
 # =========================================================================
 
+
 class TestAssignPrimer:
     def test_assign_primer_name(self):
         from polymerase.plugins.builtin.assign import AssignPrimer
+
         p = AssignPrimer()
-        assert p.name == "assign"
-        assert p.version == "2.0.1"
+        assert p.name == 'assign'
+        assert p.version == '2.0.1'
 
     def test_assign_primer_produces_output(self):
         """Run assign primer on test data, verify output files."""
+        from polymerase.compute.cpu_ops import CpuOps
+        from polymerase.core.model import Polymerase
         from polymerase.plugins.builtin.assign import AssignPrimer
         from polymerase.plugins.snapshots import AlignmentSnapshot
-        from polymerase.compute.cpu_ops import CpuOps
-        from polymerase.sparse.backend import get_sparse_class, configure
-        from polymerase.core.model import Polymerase
+        from polymerase.sparse.backend import configure
 
         configure()
 
@@ -229,6 +254,7 @@ class TestAssignPrimer:
         gtf_path = os.path.join(_base, 'data', 'annotation.gtf')
 
         with tempfile.TemporaryDirectory() as tmpdir:
+
             class MockOpts:
                 samfile = bam_path
                 gtffile = gtf_path
@@ -262,6 +288,7 @@ class TestAssignPrimer:
 
             opts = MockOpts()
             from polymerase.annotation import get_annotation_class
+
             Annotation = get_annotation_class('intervaltree')
             annot = Annotation(gtf_path, 'locus', 'None')
 
@@ -295,12 +322,14 @@ class TestAssignPrimer:
 # Built-in cofactors
 # =========================================================================
 
+
 class TestFamilyAggCofactor:
     def test_name_and_primer(self):
         from polymerase.plugins.builtin.family_agg import FamilyAggCofactor
+
         c = FamilyAggCofactor()
-        assert c.name == "family-agg"
-        assert c.primer_name == "assign"
+        assert c.name == 'family-agg'
+        assert c.primer_name == 'assign'
 
     def test_transform_produces_output(self):
         """Family-agg should produce family and class count files."""
@@ -313,10 +342,10 @@ class TestFamilyAggCofactor:
             # Create a mock counts file
             counts_file = os.path.join(tmpdir, 'test-TE_counts.tsv')
             with open(counts_file, 'w') as fh:
-                fh.write("transcript\tcount\n")
-                fh.write("HML2_1p36.21a\t50\n")
-                fh.write("HML2_1q22\t100\n")
-                fh.write("__no_feature\t0\n")
+                fh.write('transcript\tcount\n')
+                fh.write('HML2_1p36.21a\t50\n')
+                fh.write('HML2_1q22\t100\n')
+                fh.write('__no_feature\t0\n')
 
             out_dir = os.path.join(tmpdir, 'family-agg')
             os.makedirs(out_dir)
@@ -338,6 +367,7 @@ class TestFamilyAggCofactor:
 class TestNormalizeCofactor:
     def test_name_and_primer(self):
         from polymerase.plugins.builtin.normalize import NormalizeCofactor
+
         c = NormalizeCofactor()
-        assert c.name == "normalize"
-        assert c.primer_name == "assign"
+        assert c.name == 'normalize'
+        assert c.primer_name == 'assign'

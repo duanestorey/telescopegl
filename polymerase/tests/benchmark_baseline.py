@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """Baseline benchmark for Polymerase pipeline (stock CPU / scipy).
 
 Measures wall-clock time and peak memory for each pipeline stage:
@@ -30,6 +29,7 @@ import numpy as np
 # Timing / memory helpers
 # ---------------------------------------------------------------------------
 
+
 @contextmanager
 def timed_block(label, results):
     """Context manager that records wall-clock seconds into results[label]."""
@@ -51,6 +51,7 @@ def measure_peak_memory(func, *args, **kwargs):
 # ---------------------------------------------------------------------------
 # Mock options matching default CLI
 # ---------------------------------------------------------------------------
+
 
 class BenchOpts:
     def __init__(self, samfile, gtffile, outdir):
@@ -79,16 +80,18 @@ class BenchOpts:
         self.theta_prior = 200000
 
     def outfile_path(self, suffix):
-        return os.path.join(self.outdir, '%s-%s' % (self.exp_tag, suffix))
+        return os.path.join(self.outdir, f'{self.exp_tag}-{suffix}')
 
 
 # ---------------------------------------------------------------------------
 # Benchmark stages
 # ---------------------------------------------------------------------------
 
+
 def benchmark_annotation(gtffile, repeat=1):
     """Benchmark GTF annotation loading."""
     from polymerase.annotation import get_annotation_class
+
     Annotation = get_annotation_class('intervaltree')
 
     times = []
@@ -282,10 +285,11 @@ def benchmark_sparse_ops(ts):
 # Full-pipeline memory measurement
 # ---------------------------------------------------------------------------
 
+
 def benchmark_memory(opts, annot):
     """Measure peak memory for the full pipeline."""
-    from polymerase.core.model import Polymerase
     from polymerase.core.likelihood import PolymeraseLikelihood
+    from polymerase.core.model import Polymerase
 
     tracemalloc.start()
 
@@ -315,16 +319,15 @@ def benchmark_memory(opts, annot):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def run_benchmarks(repeat=3, output_file=None):
     """Run all benchmarks and print results."""
-    data_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data'
-    )
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
     samfile = os.path.join(data_dir, 'alignment.bam')
     gtffile = os.path.join(data_dir, 'annotation.gtf')
 
     if not os.path.exists(samfile) or not os.path.exists(gtffile):
-        print("ERROR: Test data not found in", data_dir)
+        print('ERROR: Test data not found in', data_dir)
         sys.exit(1)
 
     outdir = tempfile.mkdtemp()
@@ -336,100 +339,99 @@ def run_benchmarks(repeat=3, output_file=None):
 
     # Python/library versions
     import scipy
+
     all_results['versions'] = {
         'python': sys.version.split()[0],
         'numpy': np.__version__,
         'scipy': scipy.__version__,
     }
 
-    print("=" * 65)
-    print("Polymerase Baseline Benchmark (Stock CPU / scipy)")
-    print("=" * 65)
-    print(f"  Repeat: {repeat}x per stage")
-    print(f"  Data:   {samfile}")
+    print('=' * 65)
+    print('Polymerase Baseline Benchmark (Stock CPU / scipy)')
+    print('=' * 65)
+    print(f'  Repeat: {repeat}x per stage')
+    print(f'  Data:   {samfile}')
     print()
 
     # 1. Annotation
-    print("[1/6] Annotation loading...")
+    print('[1/6] Annotation loading...')
     annot_results, annot = benchmark_annotation(gtffile, repeat)
     all_results['annotation'] = annot_results
-    print(f"       {annot_results['mean_s']:.4f}s (±{annot_results['std_s']:.4f}s)")
-    print(f"       {annot_results['n_loci']} loci, {annot_results['n_intervals']} intervals")
+    print(f'       {annot_results["mean_s"]:.4f}s (±{annot_results["std_s"]:.4f}s)')
+    print(f'       {annot_results["n_loci"]} loci, {annot_results["n_intervals"]} intervals')
     print()
 
     # 2. BAM loading
-    print("[2/6] BAM loading + matrix construction...")
+    print('[2/6] BAM loading + matrix construction...')
     bam_results, ts = benchmark_alignment_loading(opts, annot, repeat)
     all_results['bam_load'] = bam_results
-    print(f"       {bam_results['mean_s']:.4f}s (±{bam_results['std_s']:.4f}s)")
-    print(f"       Matrix: {bam_results['matrix_shape']} nnz={bam_results['nnz']} density={bam_results['density']:.4f}")
+    print(f'       {bam_results["mean_s"]:.4f}s (±{bam_results["std_s"]:.4f}s)')
+    print(f'       Matrix: {bam_results["matrix_shape"]} nnz={bam_results["nnz"]} density={bam_results["density"]:.4f}')
     print()
 
     # 3. EM algorithm
-    print("[3/6] EM algorithm (init + convergence)...")
+    print('[3/6] EM algorithm (init + convergence)...')
     em_results, tl = benchmark_em(ts, opts, repeat)
     all_results['em'] = em_results
-    print(f"       Init:  {em_results['mean_init_s']:.4f}s (±{em_results['std_init_s']:.4f}s)")
-    print(f"       EM:    {em_results['mean_em_s']:.4f}s (±{em_results['std_em_s']:.4f}s)")
-    print(f"       LnL:   {em_results['log_likelihood']:.6f}")
+    print(f'       Init:  {em_results["mean_init_s"]:.4f}s (±{em_results["std_init_s"]:.4f}s)')
+    print(f'       EM:    {em_results["mean_em_s"]:.4f}s (±{em_results["std_em_s"]:.4f}s)')
+    print(f'       LnL:   {em_results["log_likelihood"]:.6f}')
     print()
 
     # 4. E-step / M-step detail
-    print("[4/6] E-step / M-step detail (10 iterations)...")
+    print('[4/6] E-step / M-step detail (10 iterations)...')
     step_results = benchmark_estep_mstep(ts, opts, n_iterations=10)
     all_results['estep_mstep'] = step_results
-    print(f"       E-step: {step_results['estep_mean_ms']:.3f}ms (±{step_results['estep_std_ms']:.3f}ms)")
-    print(f"       M-step: {step_results['mstep_mean_ms']:.3f}ms (±{step_results['mstep_std_ms']:.3f}ms)")
-    print(f"       LnL:    {step_results['lnl_mean_ms']:.3f}ms (±{step_results['lnl_std_ms']:.3f}ms)")
+    print(f'       E-step: {step_results["estep_mean_ms"]:.3f}ms (±{step_results["estep_std_ms"]:.3f}ms)')
+    print(f'       M-step: {step_results["mstep_mean_ms"]:.3f}ms (±{step_results["mstep_std_ms"]:.3f}ms)')
+    print(f'       LnL:    {step_results["lnl_mean_ms"]:.3f}ms (±{step_results["lnl_std_ms"]:.3f}ms)')
     print()
 
     # 5. Reassignment
-    print("[5/6] Reassignment modes...")
+    print('[5/6] Reassignment modes...')
     reassign_results = benchmark_reassignment(tl, repeat)
     all_results['reassignment'] = reassign_results
     for mode in ['exclude', 'choose', 'average', 'conf', 'unique', 'all']:
         mean = reassign_results[mode + '_mean_ms']
         std = reassign_results[mode + '_std_ms']
-        print(f"       {mode:10s}: {mean:.3f}ms (±{std:.3f}ms)")
+        print(f'       {mode:10s}: {mean:.3f}ms (±{std:.3f}ms)')
     print()
 
     # 6. Sparse ops
-    print("[6/6] Sparse operations (100 iterations each)...")
+    print('[6/6] Sparse operations (100 iterations each)...')
     sparse_results = benchmark_sparse_ops(ts)
     all_results['sparse_ops'] = sparse_results
     for key, val in sparse_results.items():
         if key == 'stage':
             continue
         name = key.replace('_mean_us', '')
-        print(f"       {name:20s}: {val:.1f}µs")
+        print(f'       {name:20s}: {val:.1f}µs')
     print()
 
     # Memory
-    print("[+] Memory profiling...")
+    print('[+] Memory profiling...')
     mem_results = benchmark_memory(opts, annot)
     all_results['memory'] = mem_results
-    print(f"       After BAM load:    {mem_results['after_bam_load']:.2f} MB")
-    print(f"       After EM init:     {mem_results['after_em_init']:.2f} MB")
-    print(f"       After EM converge: {mem_results['after_em_converge']:.2f} MB")
+    print(f'       After BAM load:    {mem_results["after_bam_load"]:.2f} MB')
+    print(f'       After EM init:     {mem_results["after_em_init"]:.2f} MB')
+    print(f'       After EM converge: {mem_results["after_em_converge"]:.2f} MB')
     print()
 
-    print("=" * 65)
-    print("Benchmark complete.")
+    print('=' * 65)
+    print('Benchmark complete.')
 
     if output_file:
         with open(output_file, 'w') as f:
             json.dump(all_results, f, indent=2, default=str)
-        print(f"Results saved to {output_file}")
+        print(f'Results saved to {output_file}')
 
     return all_results
 
 
 def main():
     parser = argparse.ArgumentParser(description='Polymerase baseline benchmark')
-    parser.add_argument('--repeat', type=int, default=3,
-                        help='Number of repetitions per stage (default: 3)')
-    parser.add_argument('--output', type=str, default=None,
-                        help='Output JSON file for results')
+    parser.add_argument('--repeat', type=int, default=3, help='Number of repetitions per stage (default: 3)')
+    parser.add_argument('--output', type=str, default=None, help='Output JSON file for results')
     args = parser.parse_args()
     run_benchmarks(repeat=args.repeat, output_file=args.output)
 

@@ -1,22 +1,18 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-""" Parse SAM/BAM alignment files
+"""Parse SAM/BAM alignment files"""
 
-"""
-import os
-from collections import Counter
 import logging as lg
+import os
 
 import pysam
 
-from .calignment import AlignedPair
 from ..cli import BIG_INT
+from .calignment import AlignedPair
 
 CODES = [
     ('SU', 'single_unmapped'),
@@ -27,24 +23,36 @@ CODES = [
     ('PX*', 'pair_mixed_unmapped'),
 ]
 
-CODE_INT = {t[0]:i for i,t in enumerate(CODES)}
+CODE_INT = {t[0]: i for i, t in enumerate(CODES)}
+
 
 def readkey(aln):
-    ''' Key that is unique for alignment '''
-    return (aln.query_name, aln.is_read1,
-            aln.reference_id, aln.reference_start,
-            aln.next_reference_id, aln.next_reference_start,
-            abs(aln.template_length))
+    """Key that is unique for alignment"""
+    return (
+        aln.query_name,
+        aln.is_read1,
+        aln.reference_id,
+        aln.reference_start,
+        aln.next_reference_id,
+        aln.next_reference_start,
+        abs(aln.template_length),
+    )
 
 
 def matekey(aln):
-    return (aln.query_name, not aln.is_read1,
-            aln.next_reference_id, aln.next_reference_start,
-            aln.reference_id, aln.reference_start,
-            abs(aln.template_length))
+    return (
+        aln.query_name,
+        not aln.is_read1,
+        aln.next_reference_id,
+        aln.next_reference_start,
+        aln.reference_id,
+        aln.reference_start,
+        abs(aln.template_length),
+    )
+
 
 def mate_before(aln):
-    """ Check if mate is before (to the left) of aln
+    """Check if mate is before (to the left) of aln
 
     Alignment A is before alignment B if A appears before B in a sorted BAM
     alignment. If A and B are on different chromosomes, the reference ID is
@@ -61,8 +69,9 @@ def mate_before(aln):
         return aln.next_reference_start < aln.reference_start
     return aln.next_reference_id < aln.reference_id
 
+
 def mate_after(aln):
-    """ Check if mate is after (to the right) of aln
+    """Check if mate is after (to the right) of aln
 
     Alignment A is after alignment B if A appears after B in a sorted BAM
     alignment. If A and B are on different chromosomes, the reference ID is
@@ -79,8 +88,9 @@ def mate_after(aln):
         return aln.next_reference_start > aln.reference_start
     return aln.next_reference_id > aln.reference_id
 
+
 def mate_same(aln):
-    """ Check if mate has same start position
+    """Check if mate has same start position
 
     Args:
         aln (:obj:`pysam.AlignedSegment`): An aligned segment
@@ -89,11 +99,11 @@ def mate_same(aln):
         bool: True if alignment's mate has same start position, False otherwise
 
     """
-    return aln.next_reference_id == aln.reference_id and \
-           aln.next_reference_start == aln.reference_start
+    return aln.next_reference_id == aln.reference_id and aln.next_reference_start == aln.reference_start
+
 
 def mate_in_region(aln, regtup):
-    """ Check if mate is found within region
+    """Check if mate is found within region
 
     Return True if mate is found within region or region is None
 
@@ -104,16 +114,18 @@ def mate_in_region(aln, regtup):
         bool: True if mate is within region
 
     """
-    if regtup is None: return True
-    return aln.next_reference_id == regtup[0] and \
-           regtup[1] < aln.next_reference_start < regtup[2]
+    if regtup is None:
+        return True
+    return aln.next_reference_id == regtup[0] and regtup[1] < aln.next_reference_start < regtup[2]
 
 
 """ Sequential read"""
+
+
 def fetch_bundle(samfile, **kwargs):
-    """ Iterate over alignment over reads with same ID """
+    """Iterate over alignment over reads with same ID"""
     samiter = samfile.fetch(**kwargs)
-    bundle = [ next(samiter) ]
+    bundle = [next(samiter)]
     for aln in samiter:
         if aln.query_name == bundle[0].query_name:
             bundle.append(aln)
@@ -169,11 +181,18 @@ def fetch_fragments_seq(samfile, **kwargs):
                 yield (CODE_INT['PM'], list(pair_bundle(alns)))
             else:
                 if len(alns) == 2 and all(a.is_unmapped for a in alns):
-                    yield (CODE_INT['PU'], [AlignedPair(alns[0], alns[1]), ])
+                    yield (
+                        CODE_INT['PU'],
+                        [
+                            AlignedPair(alns[0], alns[1]),
+                        ],
+                    )
                 else:
                     yield (CODE_INT['PX'], [AlignedPair(a) for a in alns])
 
+
 """ Parallel Read """
+
 
 def fetch_pairs_sorted(alniter, regtup=None):
     readcache = {}
@@ -197,8 +216,9 @@ def fetch_pairs_sorted(alniter, regtup=None):
                 yield (_code, AlignedPair(aln))
 
     for aln in readcache.values():
-        #TODO: deal with these somehow
+        # TODO: deal with these somehow
         yield ('cached', AlignedPair(aln))
+
 
 def fetch_region(samfile, annotation, opts, region):
     from ..core import model  # deferred to avoid circular import
@@ -216,7 +236,7 @@ def fetch_region(samfile, annotation, opts, region):
 
     mfile = os.path.join(_tempdir, 'tmp_map.{}.{}.{}.txt'.format(*region))
 
-    fh = open(mfile, 'w')
+    fh = open(mfile, 'w')  # noqa: SIM115
     with pysam.AlignmentFile(samfile, threads=2) as sf:
         samiter = sf.fetch(*region, multiple_iterators=True)
         regtup = (sf.get_tid(region[0]), region[1], region[2])

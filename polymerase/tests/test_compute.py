@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -8,13 +6,13 @@
 
 """Tests for polymerase.compute module."""
 
-import pytest
 import numpy as np
+import pytest
 import scipy.sparse
 
 from polymerase.compute import get_ops
-from polymerase.compute.ops import ComputeOps
 from polymerase.compute.cpu_ops import CpuOps
+from polymerase.compute.ops import ComputeOps
 
 
 @pytest.fixture
@@ -33,12 +31,11 @@ def sparse_matrix():
 
 @pytest.fixture
 def dense_matrix():
-    return np.array([[1.0, 0, 2.0, 0],
-                     [0, 3.0, 0, 4.0],
-                     [5.0, 6.0, 7.0, 0]])
+    return np.array([[1.0, 0, 2.0, 0], [0, 3.0, 0, 4.0], [5.0, 6.0, 7.0, 0]])
 
 
 # --- Backend info ---
+
 
 class TestBackendInfo:
     def test_get_ops_returns_compute_ops(self):
@@ -46,13 +43,14 @@ class TestBackendInfo:
         assert isinstance(ops, ComputeOps)
 
     def test_cpu_ops_device(self, cpu_ops):
-        assert cpu_ops.device == "cpu"
+        assert cpu_ops.device == 'cpu'
 
     def test_cpu_ops_name(self, cpu_ops):
-        assert "CPU" in cpu_ops.name
+        assert 'CPU' in cpu_ops.name
 
 
 # --- Sparse operations ---
+
 
 class TestSparseOps:
     def test_dot(self, cpu_ops, sparse_matrix):
@@ -102,6 +100,7 @@ class TestSparseOps:
 
 # --- Dense linear algebra ---
 
+
 class TestDenseOps:
     def test_solve(self, cpu_ops):
         A = np.array([[3.0, 1.0], [1.0, 2.0]])
@@ -128,6 +127,7 @@ class TestDenseOps:
 
 
 # --- Array utilities ---
+
 
 class TestArrayUtils:
     def test_to_dense(self, cpu_ops, sparse_matrix):

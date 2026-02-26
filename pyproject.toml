@@ -50,3 +50,35 @@ polymerase = [
     "data/annotation.gtf",
     "data/report.tsv",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (unused imports, undefined names, etc.)
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade (Python 3.10+ idioms)
+    "B",    # flake8-bugbear (common bug patterns)
+    "SIM",  # flake8-simplify (unnecessary complexity)
+    "N",    # pep8-naming
+]
+ignore = [
+    "E501",   # line length (handled by formatter, and scientific code is verbose)
+    "N802",   # function name should be lowercase (matrix vars like Q, Y, X are conventional)
+    "N803",   # argument name should be lowercase (same reason)
+    "N806",   # variable name should be lowercase (same reason)
+    "N801",   # class name should use CapWords (scPolymerase, csr_matrix_plus are intentional)
+    "B905",   # zip without strict= (not needed everywhere)
+    "B027",   # empty method in ABC without abstractmethod (intentional optional hooks)
+    "SIM108", # use ternary operator (readability preference)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"polymerase/tests/*" = ["E501", "B", "SIM", "E741", "F841"]
+
+[tool.ruff.format]
+quote-style = "single"

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -19,6 +17,7 @@ class GpuOps(ComputeOps):
     def __init__(self):
         import cupy as cp
         import cupyx.scipy.sparse as cpsparse
+
         self._cp = cp
         self._cpsparse = cpsparse
 
@@ -26,11 +25,11 @@ class GpuOps(ComputeOps):
 
     @property
     def device(self) -> str:
-        return "gpu"
+        return 'gpu'
 
     @property
     def name(self) -> str:
-        return "GPU (CuPy/cuSPARSE)"
+        return 'GPU (CuPy/cuSPARSE)'
 
     # --- Internal helpers ---
 
@@ -59,12 +58,14 @@ class GpuOps(ComputeOps):
     def norm(self, matrix, axis):
         # CuPy sparse doesn't have our custom norm, fall back to CPU
         from ..sparse.matrix import csr_matrix_plus
+
         if not isinstance(matrix, csr_matrix_plus):
             matrix = csr_matrix_plus(matrix)
         return matrix.norm(axis)
 
     def scale(self, matrix, axis):
         from ..sparse.matrix import csr_matrix_plus
+
         if not isinstance(matrix, csr_matrix_plus):
             matrix = csr_matrix_plus(matrix)
         return matrix.scale(axis)
@@ -84,12 +85,14 @@ class GpuOps(ComputeOps):
 
     def binmax(self, matrix, axis):
         from ..sparse.matrix import csr_matrix_plus
+
         if not isinstance(matrix, csr_matrix_plus):
             matrix = csr_matrix_plus(matrix)
         return matrix.binmax(axis)
 
     def threshold(self, matrix, thresh):
         from ..sparse.matrix import csr_matrix_plus
+
         if not isinstance(matrix, csr_matrix_plus):
             matrix = csr_matrix_plus(matrix)
         return matrix.threshold_filter(thresh)
@@ -109,8 +112,9 @@ class GpuOps(ComputeOps):
 
     def nnls(self, A, b):
         # CuPy doesn't have NNLS natively — fall back to CPU
-        from scipy.optimize import nnls
         import numpy as np
+        from scipy.optimize import nnls
+
         A_cpu = A.get() if hasattr(A, 'get') else np.asarray(A)
         b_cpu = b.get() if hasattr(b, 'get') else np.asarray(b)
         return nnls(A_cpu, b_cpu)
@@ -119,6 +123,7 @@ class GpuOps(ComputeOps):
         # NMF not available in CuPy — fall back to CPU
         import numpy as np
         from sklearn.decomposition import NMF
+
         m = matrix.get() if hasattr(matrix, 'get') else np.asarray(matrix)
         if scipy.sparse.issparse(m):
             pass  # sklearn handles sparse

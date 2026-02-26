@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -82,8 +80,7 @@ def merge_results(block_results, blocks_info, K):
     z_cols = []
     z_data = []
 
-    for (pi_b, theta_b, z_b, lnl_b), (_, feat_indices, row_indices) in zip(
-            block_results, blocks_info):
+    for (pi_b, theta_b, z_b, lnl_b), (_, feat_indices, row_indices) in zip(block_results, blocks_info):
         # Map block parameters back to global indices
         pi[feat_indices] = pi_b
         theta[feat_indices] = theta_b

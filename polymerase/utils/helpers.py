@@ -1,21 +1,19 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-""" Helper functions
-"""
+"""Helper functions"""
+
 import re
+from itertools import zip_longest
 
 import numpy as np
-from itertools import zip_longest
 
 
 def phred(P):
-    """ Calculate phred quality score for given probability/accuracy value
+    """Calculate phred quality score for given probability/accuracy value
 
     Phred scores (Q) are logarithmically related to probabilities (P):
 
@@ -41,7 +39,7 @@ def phred(P):
 
 
 def eprob(Q):
-    """ Calculate probability/accuracy value for given phred quality score
+    """Calculate probability/accuracy value for given phred quality score
 
     Probabilities (P) are logarithmically related to phred scores(Q):
 
@@ -65,17 +63,17 @@ def eprob(Q):
         >>> eprob(ord('@')-33)
         0.9992056717652757
     """
-    return 1 - (10**(float(Q) / -10))
+    return 1 - (10 ** (float(Q) / -10))
 
 
 def format_minutes(seconds):
     mins = seconds // 60
     secs = seconds % 60
-    return '%d minutes and %d secs' % (mins,secs)
+    return f'{mins} minutes and {secs} secs'
 
 
 def merge_blocks(ivs, dist=0):
-    """ Merge blocks
+    """Merge blocks
 
     Args:
         ivs (list): List of intervals. Each interval is represented by a tuple of
@@ -96,19 +94,21 @@ def merge_blocks(ivs, dist=0):
         >>> merge_interval_list([(4, 9), (10, 14), (1, 3)], dist=1)
         [(1, 14)]
     """
-    if len(ivs)<= 1: return ivs
-    ivs.sort(key=lambda x:x[0])
+    if len(ivs) <= 1:
+        return ivs
+    ivs.sort(key=lambda x: x[0])
     ret = [ivs[0]]
     for iv in ivs[1:]:
         if iv[0] - ret[-1][1] > dist:
             ret.append(iv)
         else:
-           ret[-1] = (ret[-1][0], max(iv[1],ret[-1][1]))
+            ret[-1] = (ret[-1][0], max(iv[1], ret[-1][1]))
     return ret
 
+
 class GenomeRegion:
-    """
-    """
+    """ """
+
     def __init__(self, chrom=None, start=None, end=None, region=None):
         if region is not None:
             m = re.match(r'(\w+):(\d+)-(\d+)', region)
@@ -124,22 +124,26 @@ class GenomeRegion:
                     self.start, self.end = self.end, self.start
 
     def contains(self, chrom, pos):
-        if self.chrom is None: return True
-        if self.start is None: return chrom == self.chrom
+        if self.chrom is None:
+            return True
+        if self.start is None:
+            return chrom == self.chrom
         return self.chrom == chrom and self.start <= int(pos) <= self.end
 
     def __str__(self):
-        if self.chrom is None: return 'genome'
-        if self.start is None: return '%s' % self.chrom
-        return '%s:%d-%d' % (self.chrom, self.start, self.end)
+        if self.chrom is None:
+            return 'genome'
+        if self.start is None:
+            return f'{self.chrom}'
+        return f'{self.chrom}:{self.start}-{self.end}'
 
 
 def region_iter(refs, lengths, winsize=1e7, overlap=0):
     winsize, overlap = map(int, (winsize, overlap))
-    for ref,reflen in zip(refs,lengths):
+    for ref, reflen in zip(refs, lengths):
         for i in range(0, reflen, winsize):
-            regmin = max(0, i-overlap)
-            regmax = min(i+winsize+overlap, reflen)
+            regmin = max(0, i - overlap)
+            regmax = min(i + winsize + overlap, reflen)
             yield (ref, regmin, regmax)
 
 
@@ -148,6 +152,7 @@ def grouper(iterable, n, fillvalue=None):
     # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
     args = [iter(iterable)] * n
     return zip_longest(*args, fillvalue=fillvalue)
+
 
 def merge_overlapping_regions(regions, padding=0):
     """Merge overlapping genomic regions.
@@ -165,9 +170,7 @@ def merge_overlapping_regions(regions, padding=0):
     # Group by chromosome
     by_chrom = {}
     for chrom, start, end in regions:
-        by_chrom.setdefault(chrom, []).append(
-            (max(0, start - padding), end + padding)
-        )
+        by_chrom.setdefault(chrom, []).append((max(0, start - padding), end + padding))
 
     merged = []
     for chrom in sorted(by_chrom):

@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
+
 def get_annotation_class(annotation_class_name):
-    """ Get Annotation class matching provided name
+    """Get Annotation class matching provided name
 
     Args:
         annotation_class_name (str): Name of annotation class.
@@ -22,6 +21,7 @@ def get_annotation_class(annotation_class_name):
         # return _AnnotationHTSeq
     elif annotation_class_name == 'intervaltree':
         from .intervaltree import _AnnotationIntervalTree
+
         return _AnnotationIntervalTree
     else:
         raise NotImplementedError('Choices are "htseq" or "intervaltree".')

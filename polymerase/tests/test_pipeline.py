@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 # This file is part of Polymerase.
 # Original Telescope code by Matthew L. Bendall (https://github.com/mlbendall/telescope)
 #
@@ -24,6 +22,7 @@ Download annotation:
         https://github.com/mlbendall/telescope_annotation_db/raw/master/\\
         builds/retro.hg38.v1/transcripts.gtf
 """
+
 import os
 import tempfile
 import time
@@ -41,7 +40,7 @@ ANNOTATION_FULL = os.path.join(REPO_ROOT, 'test_data', 'retro.hg38.gtf')
 # Skip entire module if test data not present
 pytestmark = pytest.mark.skipif(
     not (os.path.exists(BAM_1PCT) and os.path.exists(ANNOTATION_FULL)),
-    reason="1% BAM or retro.hg38.gtf not in test_data/"
+    reason='1% BAM or retro.hg38.gtf not in test_data/',
 )
 
 
@@ -71,15 +70,15 @@ class MockOpts:
         self.theta_prior = 200000
 
     def outfile_path(self, suffix):
-        return os.path.join(self.outdir, '%s-%s' % (self.exp_tag, suffix))
+        return os.path.join(self.outdir, f'{self.exp_tag}-{suffix}')
 
 
 @pytest.fixture(scope='module')
 def pipeline_data():
     """Load annotation and alignment once for all tests."""
-    from polymerase.sparse import backend
     from polymerase.annotation import get_annotation_class
     from polymerase.core.model import Polymerase
+    from polymerase.sparse import backend
 
     backend.configure()
 
@@ -99,17 +98,16 @@ def pipeline_data():
 # Alignment loading tests
 # -------------------------------------------------------------------------
 
+
 class TestAlignment:
     def test_total_fragments(self, pipeline_data):
         ts, _, _ = pipeline_data
         total = ts.run_info['total_fragments']
-        assert 130000 < total < 140000, f"Expected ~136K fragments, got {total}"
+        assert 130000 < total < 140000, f'Expected ~136K fragments, got {total}'
 
     def test_mapped_fragments(self, pipeline_data):
         ts, _, _ = pipeline_data
-        mapped = (ts.run_info['pair_mapped'] +
-                  ts.run_info['pair_mixed'] +
-                  ts.run_info['single_mapped'])
+        mapped = ts.run_info['pair_mapped'] + ts.run_info['pair_mixed'] + ts.run_info['single_mapped']
         assert mapped > 130000
 
     def test_overlapping_fragments(self, pipeline_data):
@@ -117,8 +115,8 @@ class TestAlignment:
         unique = ts.run_info['overlap_unique']
         ambig = ts.run_info['overlap_ambig']
         total_overlap = unique + ambig
-        assert total_overlap > 500, f"Expected >500 overlapping, got {total_overlap}"
-        assert ambig > 50, f"Expected >50 multi-mapped, got {ambig}"
+        assert total_overlap > 500, f'Expected >500 overlapping, got {total_overlap}'
+        assert ambig > 50, f'Expected >50 multi-mapped, got {ambig}'
 
     def test_matrix_shape(self, pipeline_data):
         ts, _, _ = pipeline_data
@@ -135,6 +133,7 @@ class TestAlignment:
 # EM convergence tests
 # -------------------------------------------------------------------------
 
+
 class TestEM:
     def test_em_converges(self, pipeline_data):
         """EM should converge within max_iter on this data."""
@@ -147,7 +146,7 @@ class TestEM:
         tl = PolymeraseLikelihood(ts.raw_scores, opts)
         tl.em(use_likelihood=False)
 
-        assert tl.lnl > 0, "Log-likelihood should be positive"
+        assert tl.lnl > 0, 'Log-likelihood should be positive'
 
     def test_em_pi_sums_to_one(self, pipeline_data):
         from polymerase.core.likelihood import PolymeraseLikelihood
@@ -195,6 +194,7 @@ class TestEM:
 # Block decomposition tests
 # -------------------------------------------------------------------------
 
+
 class TestDecomposition:
     def test_multiple_components(self, pipeline_data):
         """Real TE data should decompose into many independent blocks."""
@@ -203,9 +203,7 @@ class TestDecomposition:
         ts, _, _ = pipeline_data
         n_components, labels = find_blocks(ts.raw_scores)
 
-        assert n_components > 100, (
-            f"Expected >100 components on real TE data, got {n_components}"
-        )
+        assert n_components > 100, f'Expected >100 components on real TE data, got {n_components}'
 
     def test_component_count_matches_feature_space(self, pipeline_data):
         """Each feature should be assigned to exactly one component."""
@@ -240,7 +238,7 @@ class TestDecomposition:
         for _, _, row_indices in blocks:
             row_set = set(row_indices)
             overlap = all_rows & row_set
-            assert len(overlap) == 0, f"Rows {overlap} appear in multiple blocks"
+            assert len(overlap) == 0, f'Rows {overlap} appear in multiple blocks'
             all_rows |= row_set
 
     def test_em_parallel_produces_valid_output(self, pipeline_data):
@@ -266,6 +264,7 @@ class TestDecomposition:
 # -------------------------------------------------------------------------
 # Reassignment tests
 # -------------------------------------------------------------------------
+
 
 class TestReassignment:
     def test_all_modes_run(self, pipeline_data):
@@ -317,6 +316,7 @@ class TestReassignment:
 # Report generation tests
 # -------------------------------------------------------------------------
 
+
 class TestReportGeneration:
     def test_output_files_created(self, pipeline_data):
         """Full pipeline should produce stats and counts files."""
@@ -332,9 +332,16 @@ class TestReportGeneration:
         with tempfile.TemporaryDirectory() as tmpdir:
             stats_file = os.path.join(tmpdir, 'stats.tsv')
             counts_file = os.path.join(tmpdir, 'counts.tsv')
-            output_report(ts.feat_index, ts.feature_length, ts.run_info, tl,
-                          opts.reassign_mode, opts.conf_prob,
-                          stats_file, counts_file)
+            output_report(
+                ts.feat_index,
+                ts.feature_length,
+                ts.run_info,
+                tl,
+                opts.reassign_mode,
+                opts.conf_prob,
+                stats_file,
+                counts_file,
+            )
 
             assert os.path.exists(stats_file)
             assert os.path.exists(counts_file)
@@ -344,6 +351,7 @@ class TestReportGeneration:
     def test_counts_file_has_features(self, pipeline_data):
         """Counts file should list features with counts."""
         import pandas as pd
+
         from polymerase.core.likelihood import PolymeraseLikelihood
         from polymerase.core.reporter import output_report
 
@@ -356,9 +364,16 @@ class TestReportGeneration:
         with tempfile.TemporaryDirectory() as tmpdir:
             stats_file = os.path.join(tmpdir, 'stats.tsv')
             counts_file = os.path.join(tmpdir, 'counts.tsv')
-            output_report(ts.feat_index, ts.feature_length, ts.run_info, tl,
-                          opts.reassign_mode, opts.conf_prob,
-                          stats_file, counts_file)
+            output_report(
+                ts.feat_index,
+                ts.feature_length,
+                ts.run_info,
+                tl,
+                opts.reassign_mode,
+                opts.conf_prob,
+                stats_file,
+                counts_file,
+            )
 
             df = pd.read_csv(counts_file, sep='\t')
             assert 'transcript' in df.columns
@@ -372,10 +387,10 @@ class TestReportGeneration:
 # Performance benchmarks (informational, not strict assertions)
 # -------------------------------------------------------------------------
 
+
 class TestPerformance:
     def test_bam_loading_under_10s(self, pipeline_data):
         """BAM loading for 136K fragments should complete under 10s."""
-        from polymerase.sparse import backend
         from polymerase.annotation import get_annotation_class
         from polymerase.core.model import Polymerase
 
@@ -389,7 +404,7 @@ class TestPerformance:
         ts.load_alignment(annot)
         elapsed = time.perf_counter() - t0
 
-        assert elapsed < 10, f"BAM loading took {elapsed:.1f}s (expected <10s)"
+        assert elapsed < 10, f'BAM loading took {elapsed:.1f}s (expected <10s)'
 
     def test_em_under_1s(self, pipeline_data):
         """EM on 745x325 matrix should complete under 1s."""
@@ -404,7 +419,7 @@ class TestPerformance:
         tl.em(use_likelihood=False)
         elapsed = time.perf_counter() - t0
 
-        assert elapsed < 1.0, f"EM took {elapsed:.2f}s (expected <1s)"
+        assert elapsed < 1.0, f'EM took {elapsed:.2f}s (expected <1s)'
 
     def test_block_decomposition_under_10ms(self, pipeline_data):
         """Block decomposition should be fast."""
@@ -416,22 +431,23 @@ class TestPerformance:
         find_blocks(ts.raw_scores)
         elapsed = time.perf_counter() - t0
 
-        assert elapsed < 0.01, f"Decomposition took {elapsed*1000:.1f}ms (expected <10ms)"
+        assert elapsed < 0.01, f'Decomposition took {elapsed * 1000:.1f}ms (expected <10ms)'
 
 
 # -------------------------------------------------------------------------
 # Indexed vs Sequential path equivalence (5% BAM)
 # -------------------------------------------------------------------------
 
+
 @pytest.fixture(scope='module')
 def path_comparison_data():
     """Run both loading paths on same 5% data for comparison."""
     if not (os.path.exists(BAM_5PCT_COLLATED) and os.path.exists(BAM_5PCT_SORTED)):
-        pytest.skip("5% BAMs not in test_data/")
+        pytest.skip('5% BAMs not in test_data/')
 
-    from polymerase.sparse import backend
     from polymerase.annotation import get_annotation_class
     from polymerase.core.model import Polymerase
+    from polymerase.sparse import backend
 
     backend.configure()
     Annotation = get_annotation_class('intervaltree')
@@ -497,16 +513,16 @@ class TestIndexedPathEquivalence:
             if nz_seq != nz_idx:
                 mismatches += 1
 
-        assert mismatches == 0, f"{mismatches} reads have different values"
+        assert mismatches == 0, f'{mismatches} reads have different values'
 
     def test_indexed_faster_than_sequential(self, path_comparison_data):
         """Indexed path should be at least 2x faster."""
         if not (os.path.exists(BAM_5PCT_COLLATED) and os.path.exists(BAM_5PCT_SORTED)):
-            pytest.skip("5% BAMs not in test_data/")
+            pytest.skip('5% BAMs not in test_data/')
 
-        from polymerase.sparse import backend
         from polymerase.annotation import get_annotation_class
         from polymerase.core.model import Polymerase
+        from polymerase.sparse import backend
 
         backend.configure()
         Annotation = get_annotation_class('intervaltree')
@@ -534,8 +550,7 @@ class TestIndexedPathEquivalence:
 
         speedup = t_seq / t_idx
         assert speedup > 2.0, (
-            f"Indexed ({t_idx:.1f}s) should be >2x faster than "
-            f"sequential ({t_seq:.1f}s), got {speedup:.1f}x"
+            f'Indexed ({t_idx:.1f}s) should be >2x faster than sequential ({t_seq:.1f}s), got {speedup:.1f}x'
         )
 
 
@@ -543,15 +558,16 @@ class TestIndexedPathEquivalence:
 # Full-scale 100% BAM tests
 # -------------------------------------------------------------------------
 
+
 @pytest.fixture(scope='module')
 def fullscale_data():
     """Load 100% BAM (14.7M fragments) — runs once per module."""
     if not os.path.exists(BAM_100PCT):
-        pytest.skip("100% BAM not in test_data/")
+        pytest.skip('100% BAM not in test_data/')
 
-    from polymerase.sparse import backend
     from polymerase.annotation import get_annotation_class
     from polymerase.core.model import Polymerase
+    from polymerase.sparse import backend
 
     backend.configure()
     Annotation = get_annotation_class('intervaltree')
@@ -577,22 +593,24 @@ class TestFullScale:
     def test_total_fragments(self, fullscale_data):
         ts, _, _ = fullscale_data
         total = ts.run_info['total_fragments']
-        assert 14_000_000 < total < 15_000_000, f"Expected ~14.7M, got {total:,}"
+        assert 14_000_000 < total < 15_000_000, f'Expected ~14.7M, got {total:,}'
 
     def test_matrix_dimensions(self, fullscale_data):
         ts, _, _ = fullscale_data
         n_frags, n_feats = ts.shape
-        assert n_frags > 50_000, f"Expected >50K fragments, got {n_frags:,}"
-        assert n_feats > 3_000, f"Expected >3K features, got {n_feats:,}"
+        assert n_frags > 50_000, f'Expected >50K fragments, got {n_frags:,}'
+        assert n_feats > 3_000, f'Expected >3K features, got {n_feats:,}'
 
     def test_many_components(self, fullscale_data):
         from polymerase.sparse.decompose import find_blocks
+
         ts, _, _ = fullscale_data
         n_comp, _ = find_blocks(ts.raw_scores)
-        assert n_comp > 1000, f"Expected >1000 components, got {n_comp}"
+        assert n_comp > 1000, f'Expected >1000 components, got {n_comp}'
 
     def test_em_runs(self, fullscale_data):
         from polymerase.core.likelihood import PolymeraseLikelihood
+
         ts, opts, _ = fullscale_data
         np.random.seed(ts.get_random_seed())
 
@@ -605,6 +623,7 @@ class TestFullScale:
 
     def test_report_generation(self, fullscale_data):
         import pandas as pd
+
         from polymerase.core.likelihood import PolymeraseLikelihood
         from polymerase.core.reporter import output_report
 
@@ -616,25 +635,25 @@ class TestFullScale:
         with tempfile.TemporaryDirectory() as tmpdir:
             stats_f = os.path.join(tmpdir, 'stats.tsv')
             counts_f = os.path.join(tmpdir, 'counts.tsv')
-            output_report(ts.feat_index, ts.feature_length, ts.run_info, tl,
-                          opts.reassign_mode, opts.conf_prob,
-                          stats_f, counts_f)
+            output_report(
+                ts.feat_index, ts.feature_length, ts.run_info, tl, opts.reassign_mode, opts.conf_prob, stats_f, counts_f
+            )
 
             df = pd.read_csv(counts_f, sep='\t')
             assert len(df) > 3000
             active = (df['count'] > 0).sum()
-            assert active > 2000, f"Expected >2000 active loci, got {active}"
+            assert active > 2000, f'Expected >2000 active loci, got {active}'
 
     def test_pipeline_under_60s(self, fullscale_data):
         """Full pipeline (load + EM + report) on 14.7M fragments under 60s."""
-        from polymerase.sparse import backend
         from polymerase.annotation import get_annotation_class
-        from polymerase.core.model import Polymerase
         from polymerase.core.likelihood import PolymeraseLikelihood
+        from polymerase.core.model import Polymerase
         from polymerase.core.reporter import output_report
+        from polymerase.sparse import backend
 
         if not os.path.exists(BAM_100PCT):
-            pytest.skip("100% BAM not in test_data/")
+            pytest.skip('100% BAM not in test_data/')
 
         backend.configure()
         Annotation = get_annotation_class('intervaltree')
@@ -659,9 +678,9 @@ class TestFullScale:
 
         stats_f = os.path.join(outdir, 'stats.tsv')
         counts_f = os.path.join(outdir, 'counts.tsv')
-        output_report(ts.feat_index, ts.feature_length, ts.run_info, tl,
-                      opts.reassign_mode, opts.conf_prob,
-                      stats_f, counts_f)
+        output_report(
+            ts.feat_index, ts.feature_length, ts.run_info, tl, opts.reassign_mode, opts.conf_prob, stats_f, counts_f
+        )
 
         elapsed = time.perf_counter() - t0
-        assert elapsed < 60, f"Full pipeline took {elapsed:.1f}s (expected <60s)"
+        assert elapsed < 60, f'Full pipeline took {elapsed:.1f}s (expected <60s)'
