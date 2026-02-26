@@ -4,6 +4,79 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.3](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-26
+
+Production pipeline fixes from testing against full RepeatMasker GTFs and
+real RNA-seq data (SRR9666161, 14.7M fragments).
+
+### Fixed
+
+- **family-agg attribute auto-detection**: The `family-agg` cofactor now
+  auto-detects whether the GTF uses `repFamily`/`repClass` (retro.hg38 format)
+  or `family_id`/`class_id` (RepeatMasker standard format). Previously all
+  families mapped to "Unknown" with RepeatMasker GTFs. Detection logic lives in
+  the new `annotation/gtf_utils.py` module.
+
+- **Interval merging assertion crash**: Replaced `assert len(mergeable) == 1`
+  in `intervaltree.py` with a loop that merges all overlapping intervals sharing
+  the same attribute key. This fixes crashes when using `--attribute gene_id`
+  with GTFs containing nested TE insertions. Also removed vestigial `if True:`.
+
+- **run_stats.tsv header format**: Added missing newline after the RunInfo
+  comment line. The file now parses cleanly with
+  `pd.read_csv(..., comment='#')`.
+
+- **`--logfile` write mode**: Changed `argparse.FileType('r')` to
+  `argparse.FileType('w')` in all four option classes (BulkIDOptions,
+  scIDOptions, BulkResumeOptions, scResumeOptions).
+
+### Added
+
+- **`--classes` filter**: New CLI option for `polymerase assign` that accepts a
+  comma-separated list of TE classes (e.g., `--classes LTR,LINE,SINE`). Filters
+  GTF exon lines during loading, enabling use of full 4.8M-entry RepeatMasker
+  GTFs that would otherwise exhaust memory. Auto-detects the class attribute
+  name (`repClass` or `class_id`).
+
+- **Performance Optimization section** in README: Documents optional
+  acceleration packages (`numba`, `sparse-dot-mkl`, `cupy`) with a backend
+  comparison table.
+
+- **Version History section** in README.
+
+- **BAI pre-creation hint**: Informational log message when auto-creating a
+  `.bai` index, suggesting pipelines pre-create it with `samtools index`.
+
+- **`--outdir` info message**: Logs a suggestion to use `--outdir` when output
+  defaults to the current directory.
+
+### Changed
+
+- **Skip SAM tag writing on indexed path**: `process_overlap_frag()` now
+  accepts `write_tags=False` to skip ZF/ZT/ZB tag writes when `--updated_sam`
+  is not requested. Reduces per-fragment processing overhead on the indexed
+  loading path.
+
+- Version bumped to 2.0.3 in `__init__.py` and `pyproject.toml`.
+
+---
+
+## [2.0.2](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-26
+
+### Added
+
+- **Ruff linting and formatting** configuration in `pyproject.toml`.
+- **GitHub Actions CI** (`.github/workflows/test.yml`): lint job with
+  `astral-sh/ruff-action` plus conda-based test matrix (Python 3.10, 3.12,
+  3.13 on ubuntu-latest).
+
+### Changed
+
+- Applied `ruff check --fix` and `ruff format` across 49 files (net -56 lines
+  of dead code removed).
+
+---
+
 ## [2.0.1](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-26
 
 ### Added

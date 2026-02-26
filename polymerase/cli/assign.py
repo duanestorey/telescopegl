@@ -42,6 +42,16 @@ class IDOptions(SubcommandOptions):
             self.gtffile = _DEFAULT_GTF
             lg.info('Using bundled annotation: %s', os.path.basename(self.gtffile))
 
+        # Parse --classes into a set (or None for all)
+        raw_classes = getattr(self, 'classes', None)
+        if raw_classes:
+            self.classes = {c.strip() for c in raw_classes.split(',') if c.strip()}
+        else:
+            self.classes = None
+
+        if getattr(self, 'outdir', '.') == '.':
+            lg.info('Output will be written to current directory. Use --outdir for cleaner organization.')
+
         if hasattr(self, 'tempdir') and self.tempdir is None and hasattr(self, 'ncpu') and self.ncpu > 1:
             self.tempdir = tempfile.mkdtemp()
             atexit.register(shutil.rmtree, self.tempdir)
@@ -73,6 +83,10 @@ class BulkIDOptions(IDOptions):
             default: __no_feature
             help: Used internally to represent alignments. Must be different
                   from all other feature names.
+        - classes:
+            default: null
+            help: Comma-separated list of TE classes to include (e.g., LTR,LINE,SINE).
+                  Filters GTF during loading. If omitted, all classes are loaded.
         - ncpu:
             default: 1
             type: int
@@ -92,7 +106,7 @@ class BulkIDOptions(IDOptions):
             action: store_true
             help: Print debug messages.
         - logfile:
-            type: argparse.FileType('r')
+            type: argparse.FileType('w')
             help: Log output to this file.
         - outdir:
             default: .
@@ -243,6 +257,10 @@ class scIDOptions(IDOptions):
             default: __no_feature
             help: Used internally to represent alignments. Must be different
                   from all other feature names.
+        - classes:
+            default: null
+            help: Comma-separated list of TE classes to include (e.g., LTR,LINE,SINE).
+                  Filters GTF during loading. If omitted, all classes are loaded.
         - ncpu:
             default: 1
             type: int
@@ -262,7 +280,7 @@ class scIDOptions(IDOptions):
             action: store_true
             help: Print debug messages.
         - logfile:
-            type: argparse.FileType('r')
+            type: argparse.FileType('w')
             help: Log output to this file.
         - outdir:
             default: .
@@ -468,7 +486,7 @@ def run(args, sc=True):
     lg.info('Loading annotation...')
     sw.start('Annotation')
     stime = time()
-    annot = Annotation(opts.gtffile, opts.attribute, opts.stranded_mode)
+    annot = Annotation(opts.gtffile, opts.attribute, opts.stranded_mode, classes=opts.classes)
     _annot_elapsed = time() - stime
     sw.stop()
     lg.info(f'Loaded annotation in {fmtmins(_annot_elapsed)}')

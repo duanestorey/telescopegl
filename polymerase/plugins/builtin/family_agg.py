@@ -15,6 +15,7 @@ import os
 
 import pandas as pd
 
+from ...annotation.gtf_utils import detect_family_class_attrs
 from ..abc import Cofactor
 
 
@@ -36,9 +37,14 @@ def _parse_gtf_attributes(attr_str):
 def _build_locus_metadata(gtf_path, locus_attr='locus'):
     """Build mapping from locus name to family/class from GTF exon lines.
 
+    Auto-detects whether the GTF uses repFamily/repClass or family_id/class_id.
+
     Returns:
         dict: {locus_name: {'repFamily': str, 'repClass': str}}
     """
+    family_key, class_key = detect_family_class_attrs(gtf_path)
+    lg.debug(f'family-agg: detected GTF attributes: family={family_key}, class={class_key}')
+
     meta = {}
     with open(gtf_path) as fh:
         for line in fh:
@@ -53,8 +59,8 @@ def _build_locus_metadata(gtf_path, locus_attr='locus'):
             locus = attrs.get(locus_attr)
             if locus and locus not in meta:
                 meta[locus] = {
-                    'repFamily': attrs.get('repFamily', 'Unknown'),
-                    'repClass': attrs.get('repClass', 'Unknown'),
+                    'repFamily': attrs.get(family_key, 'Unknown'),
+                    'repClass': attrs.get(class_key, 'Unknown'),
                 }
     return meta
 

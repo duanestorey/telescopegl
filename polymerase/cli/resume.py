@@ -35,7 +35,7 @@ class BulkResumeOptions(IDOptions):
             action: store_true
             help: Print debug messages.
         - logfile:
-            type: argparse.FileType('r')
+            type: argparse.FileType('w')
             help: Log output to this file.
         - outdir:
             default: .
@@ -120,7 +120,7 @@ class scResumeOptions(IDOptions):
             action: store_true
             help: Print debug messages.
         - logfile:
-            type: argparse.FileType('r')
+            type: argparse.FileType('w')
             help: Log output to this file.
         - outdir:
             default: .
