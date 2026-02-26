@@ -407,6 +407,18 @@ def _parse_primers_arg(opts):
     return [p.strip() for p in raw.split(',') if p.strip()]
 
 
+def _collect_output_files(outdir):
+    """Collect output files relative to outdir, sorted with top-level first."""
+    results = []
+    for root, _dirs, files in os.walk(outdir):
+        for f in sorted(files):
+            relpath = os.path.relpath(os.path.join(root, f), outdir)
+            results.append(relpath)
+    # Sort: top-level files first, then subdirectory files
+    results.sort(key=lambda p: (os.sep in p, p))
+    return results
+
+
 def _backend_display_name(be):
     """Human-readable backend name for console output."""
     names = {
@@ -538,6 +550,15 @@ def run(args, sc=True):
     registry.notify('on_annotation_loaded', annot_snapshot)
     registry.notify('on_matrix_built', alignment_snapshot)
     registry.commit_all(opts.outdir, opts.exp_tag, console=console)
+
+    # Output file summary
+    _output_files = _collect_output_files(opts.outdir)
+    if _output_files:
+        console.blank()
+        console.section('Output ({} files in {})'.format(
+            len(_output_files), opts.outdir + '/'))
+        for f in _output_files:
+            console.output_file(f)
 
     # Completion
     console.blank()

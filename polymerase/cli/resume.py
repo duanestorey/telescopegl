@@ -271,6 +271,16 @@ def run(args, sc=True):
     registry.notify('on_matrix_built', alignment_snapshot)
     registry.commit_all(opts.outdir, opts.exp_tag, console=console)
 
+    # Output file summary
+    from .assign import _collect_output_files
+    _output_files = _collect_output_files(opts.outdir)
+    if _output_files:
+        console.blank()
+        console.section('Output ({} files in {})'.format(
+            len(_output_files), opts.outdir + '/'))
+        for f in _output_files:
+            console.output_file(f)
+
     # Completion
     console.blank()
     console.status('Completed in {:.1f}s'.format(time() - total_time))
