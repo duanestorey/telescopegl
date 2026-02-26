@@ -16,7 +16,6 @@ class BackendInfo:
     name: str = 'cpu_stock'
     has_numba: bool = False
     has_mkl: bool = False
-    has_gpu: bool = False
     threadsafe_parallelism: bool = False
 
 
@@ -62,13 +61,10 @@ def _detect_mkl():
         return False
 
 
-def configure(use_gpu=False):
+def configure():
     """Configure the compute backend based on available libraries.
 
     Tries Numba+MKL first, falls back to stock scipy.
-
-    Args:
-        use_gpu: Reserved for future GPU support.
     """
     global _active_backend
 
@@ -89,7 +85,6 @@ def configure(use_gpu=False):
         name=name,
         has_numba=has_numba,
         has_mkl=has_mkl,
-        has_gpu=False,
         threadsafe_parallelism=threadsafe,
     )
     return _active_backend

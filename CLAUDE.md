@@ -10,18 +10,32 @@ Telescope resolves multi-mapped RNA-seq reads to transposable element (TE) loci 
 Load BAM → Build sparse matrix → Run EM → Reassign reads → Generate reports
 ```
 
+Two BAM loading paths:
+- **Sequential** (collated BAM): Streams all reads, pairs by name
+- **Indexed** (coordinate-sorted + .bai): Two-pass approach — fetches TE regions first, then buffers relevant fragments. 4-8x faster, produces identical matrix.
+
 ## Key Architecture
 
 ### Core Files
 
 | File | Purpose |
 |------|---------|
-| `telescope/utils/model.py` | Core classes: `Telescope` (BAM loading, matrix building), `TelescopeLikelihood` (EM algorithm), `Assigner` (overlap assignment) |
-| `telescope/utils/sparse_plus.py` | `csr_matrix_plus` — extends scipy CSR with `norm`, `scale`, `binmax`, `choose_random`, `apply_func`, `count` |
+| `telescope/utils/model.py` | `Telescope` class: BAM loading (`_load_sequential`, `_load_indexed`, `_load_parallel`), matrix construction, `Assigner` |
+| `telescope/utils/likelihood.py` | `TelescopeLikelihood` class: EM algorithm (estep, mstep, lnl, em, em_parallel, reassign) |
+| `telescope/utils/reporter.py` | `output_report()` + `update_sam()` — I/O separated from algorithm |
+| `telescope/utils/sparse_plus.py` | `csr_matrix_plus` — extends scipy CSR with `norm`, `scale`, `binmax`, `choose_random`, `apply_func`, `count`, `threshold_filter`, `indicator` |
 | `telescope/telescope_assign.py` | `assign` subcommand: CLI options (`BulkIDOptions`, `scIDOptions`), `run()` orchestrator |
 | `telescope/telescope_resume.py` | `resume` subcommand: loads checkpoint, re-runs EM with different params |
 | `telescope/__main__.py` | Entry point, argparse subcommand routing |
 | `telescope/utils/__init__.py` | `SubcommandOptions` base class (YAML-based CLI), `configure_logging()`, `BIG_INT` |
+
+### Optimization Files
+
+| File | Purpose |
+|------|---------|
+| `telescope/utils/backend.py` | Two-tier backend: CPU-Optimized/Numba+MKL → Stock CPU/scipy. Auto-detection via `configure()` / `get_backend()` / `get_sparse_class()` |
+| `telescope/utils/cpu_optimized_sparse.py` | `CpuOptimizedCsrMatrix(csr_matrix_plus)` — Numba JIT kernels for `binmax`, `choose_random`, `threshold_filter`, `indicator` |
+| `telescope/utils/decompose.py` | Connected component block decomposition: `find_blocks()`, `split_matrix()`, `merge_results()` |
 
 ### Annotation Files
 | File | Purpose |
@@ -33,8 +47,7 @@ Load BAM → Build sparse matrix → Run EM → Reassign reads → Generate repo
 ### Alignment Files
 | File | Purpose |
 |------|---------|
-| `telescope/utils/alignment.py` | Fragment fetching, read pairing |
-| `telescope/utils/alignment_parsers.py` | BAM parsing helpers |
+| `telescope/utils/alignment.py` | Fragment fetching, read pairing, `_find_primary()` for supplementary alignment handling |
 | `telescope/utils/calignment.pyx` | Cython `AlignedPair` class |
 
 ## EM Algorithm (TelescopeLikelihood)
@@ -53,28 +66,67 @@ Load BAM → Build sparse matrix → Run EM → Reassign reads → Generate repo
 
 **Six reassignment modes:** `exclude`, `choose`, `average`, `conf`, `unique`, `all`
 
+**Block-parallel EM:** `em_parallel()` decomposes the score matrix into independent blocks via connected components, runs EM on each block (ThreadPoolExecutor for Numba backends), and merges results.
+
+## Indexed BAM Loading
+
+`_load_indexed()` in `model.py` uses a two-pass approach:
+1. **Phase 1**: `pysam.fetch()` on TE regions (with 500bp padding) to identify relevant fragment names
+2. **Phase 2**: Stream full BAM, buffering all alignments for relevant fragments (mates + non-TE mappings for `__no_feature`)
+3. **Phase 3**: Process buffered fragments with identical logic to sequential path
+
+Auto-detected when BAM has a `.bai` index and `--updated_sam` is not set.
+
+**`__no_feature`**: Column 0 in the matrix. Acts as a noise sink — fragments mapping to both a TE and a non-TE region have probability split between the TE and `__no_feature`. Absorbs ~7% of pi mass on typical data. Essential for preventing phantom TE expression.
+
 ## CLI Options Pattern
 
 Options are defined as YAML strings in `BulkIDOptions.OPTS` / `scIDOptions.OPTS`, parsed by `SubcommandOptions._parse_yaml_opts()`, and converted to argparse arguments. Access via `opts.attribute_name`.
 
 ## Test Data
 
-- `telescope/data/alignment.bam` — test BAM file
-- `telescope/data/annotation.gtf` — test GTF annotation
-- Expected log-likelihood on test data: ≈ 95252.596293
+### Bundled (in repo)
+- `telescope/data/alignment.bam` — small test BAM (1000 fragments, 59 features)
+- `telescope/data/annotation.gtf` — small test GTF
+- `test_data/SRR9666161_1pct_collated.bam` — 1% subsample, collated (30MB, ~136K fragments)
+- `test_data/retro.hg38.gtf` — full retro.hg38 TE annotation (28,513 features)
+
+### External (not in repo, tests skip gracefully)
+- `test_data/SRR9666161_5pct_collated.bam` — 5% subsample, collated
+- `test_data/SRR9666161_5pct_sorted.bam` + `.bai` — 5% subsample, sorted+indexed
+- `test_data/SRR9666161_100pct_sorted.bam` + `.bai` — full dataset (14.7M fragments)
+
+### Golden values
+- Log-likelihood on bundled test data: ≈ 95252.596293
 - Test data has 1 connected component (all ERVK family)
+- 100% data: 75,121 fragments x 4,372 features, 2,794 components
+
+## Tests
+
+170 tests across 7 test files:
+- `test_annotation_parsers.py` — 8 tests
+- `test_sparse_plus.py` — 45 tests
+- `test_em.py` — 33 tests (EM + baseline equivalence)
+- `test_cpu_optimized_sparse.py` — 33 tests (Numba vs stock)
+- `test_decomposition.py` — 10 tests (block decomposition)
+- `test_numerical_equivalence.py` — 6 tests (cross-backend)
+- `test_1pct_pipeline.py` — 35 tests (1%/5%/100% BAM pipeline, indexed path equivalence)
 
 ## Key Conventions
 
-- Sparse matrices use `csr_matrix_plus` from `sparse_plus.py` (aliased as `csr_matrix` in model.py)
+- Sparse matrices use `csr_matrix_plus` from `sparse_plus.py` (or `CpuOptimizedCsrMatrix` when Numba available)
+- `get_sparse_class()` from `backend.py` returns the appropriate sparse class
 - pysam opened with `check_sq=False` to skip sequence dictionary validation
+- pysam uses `threads=N` for multi-threaded BAM decompression
 - Fragment counts tracked via `collections.Counter` (`alninfo`)
-- `__no_feature` sentinel for reads not overlapping annotation
+- `__no_feature` sentinel for reads not overlapping annotation (always column 0)
 - All float64 precision
 - Random seed derived from `total_fragments % shape[0] * shape[1]`
+- `_find_primary()` in alignment.py ensures primary alignment is used for fragment classification (not supplementary)
 
 ## Dependencies
 
+### Required
 - `scipy.sparse` (CSR matrices)
 - `numpy` (arrays, linear algebra)
 - `pysam` (BAM reading/writing)
@@ -82,12 +134,22 @@ Options are defined as YAML strings in `BulkIDOptions.OPTS` / `scIDOptions.OPTS`
 - `pandas` (report generation)
 - `cython` (AlignedPair performance)
 
-## Acceleration Plan
+### Optional (CPU-optimized tier)
+- `numba` (JIT compilation for sparse kernels)
+- `sparse_dot_mkl` (MKL-accelerated sparse ops)
+- `threadpoolctl` (BLAS thread control)
 
-See `PLAN.md` for the GPU + parallel acceleration plan covering:
-1. Three-tier backend (GPU/CuPy → CPU-Optimized/Numba+MKL → Stock CPU/scipy)
-2. Block decomposition via connected components
-3. Region pre-filtering for I/O optimization
-4. pysam multi-threaded decompression
-5. Parallel reassignment
-6. Batch COO matrix construction
+## Optimizations Implemented
+
+- **Backend abstraction** (`backend.py`): Auto-detects Numba+MKL, falls back to stock scipy
+- **Numba JIT sparse kernels** (`cpu_optimized_sparse.py`): 5-50x faster `binmax`, `choose_random`, `threshold_filter`, `indicator`
+- **Connected component block decomposition** (`decompose.py`): Splits matrix into independent sub-problems
+- **Block-parallel EM** (`likelihood.py` `em_parallel`): ThreadPoolExecutor across blocks (Numba releases GIL)
+- **Batch COO matrix construction** (`model.py`): Replaced DOK loop with bulk COO + duplicate resolution
+- **pysam multi-threaded decompression**: All BAM reads use `threads=N`
+- **Indexed BAM loading** (`model.py` `_load_indexed`): Region pre-filtering skips ~99% of reads
+- **Supplementary alignment fix** (`alignment.py` `_find_primary`): Correct PM/PX classification regardless of BAM sort order
+
+### Remaining
+- Parallel reassignment (ThreadPoolExecutor for 6 modes)
+- In-memory parallel BAM loading (replace temp files)

@@ -91,11 +91,22 @@ annotation file with the transposable element gene model.
 telescope assign [samfile] [gtffile]
 ```
 
-Alignments in the BAM file must be ordered so that all alignments for a read
-pair appear sequentially in the file - coordinate-sorted BAMs do not work. 
-The default SAM/BAM output for many aligners is in the correct order, or BAM
+Telescope accepts both **coordinate-sorted indexed BAMs** and **collated/name-sorted BAMs**.
+
+For coordinate-sorted BAMs with a `.bai` index, Telescope automatically uses
+region-based loading that only reads TE-overlapping regions, which is 4-8x faster
+than a full scan. To create an indexed BAM:
+
+```bash
+samtools sort -o aligned_sorted.bam aligned.bam
+samtools index aligned_sorted.bam
+```
+
+For collated BAMs (where all alignments for a read pair appear sequentially),
+the default SAM/BAM output for many aligners is in the correct order, or BAM
 files can be sorted by read name (`samtools sort -n`). A faster alternative
 to a full read name sort is [`samtools collate`](http://www.htslib.org/doc/samtools-collate.html).
+
 Reads should be aligned and be permitted to map to multiple locations (i.e. `-k` option in `bowtie2`).
 
 The annotation file must be in GTF format and indicate the genomic regions that

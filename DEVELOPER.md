@@ -5,46 +5,123 @@
 ### 1. Clone repository
 
 ```bash
-git clone git@github.com:mlbendall/telescope.git telescope_dev.git
+git clone git@github.com:duanestorey/telescopegl.git
 ```
 
 ### 2. Create conda environment
 
-An environment file is included in this repo. 
+An environment file is included in this repo.
 
 ```bash
-mamba env create -n telescope_dev -f telescope_dev.git/environment.yml
+mamba env create -n telescope_dev -f environment.yml
 conda activate telescope_dev
 ```
 
-### Checkout version (optional)
-
-If not using the main branch, check out the correct version
+### 3. Install in development mode
 
 ```bash
-cd telescope_dev.git
-git pull #just in case anything changed
-git checkout main
+pip install -e .
 ```
 
-### Install using pip
-
-Install `telescope` in interactive mode (`-e`) so that changes to the
-code are reflected immediately without reinstalling. 
+### 4. Optional: Install CPU-optimized dependencies
 
 ```bash
-# change to repo directory if not already there
-# cd telescope_dev.git
-
-pip install -e . 
+pip install numba sparse-dot-mkl threadpoolctl
 ```
 
+These are auto-detected at runtime. When available, Numba JIT kernels replace
+stock scipy operations for `binmax`, `choose_random`, `threshold_filter`, and
+`indicator` — typically 5-50x faster on those operations.
 
 ## Testing
 
-The following one-liner will run telescope against the provided test
-data and check the final log-likelihood calculation.
+### Quick test (bundled data)
 
 ```bash
 eval $(telescope test) 2>&1 | grep 'Final log-likelihood' | grep -q '95252.56293' && echo "Test OK" || echo "Test FAIL"
 ```
+
+### Full test suite
+
+```bash
+pytest telescope/tests/ -v
+```
+
+170 tests covering:
+- Sparse matrix operations (`test_sparse_plus.py`)
+- EM algorithm and baseline equivalence (`test_em.py`)
+- Block decomposition (`test_decomposition.py`)
+- CPU-optimized vs stock equivalence (`test_cpu_optimized_sparse.py`)
+- Numerical equivalence across backends (`test_numerical_equivalence.py`)
+- Pipeline tests on 1% BAM data (`test_1pct_pipeline.py`)
+
+### Test data
+
+**Bundled in repo** (used by default):
+- `telescope/data/alignment.bam` — small test BAM (1000 fragments)
+- `telescope/data/annotation.gtf` — small test GTF (59 features)
+- `test_data/SRR9666161_1pct_collated.bam` — 1% subsample (30MB, ~136K fragments)
+- `test_data/retro.hg38.gtf` — full retro.hg38 TE annotation (28,513 features)
+
+**Optional large files** (tests skip gracefully if absent):
+- `test_data/SRR9666161_5pct_collated.bam` — 5% subsample, collated
+- `test_data/SRR9666161_5pct_sorted.bam` + `.bai` — 5% subsample, sorted+indexed
+- `test_data/SRR9666161_100pct_sorted.bam` + `.bai` — full dataset (~14.7M fragments)
+
+### Benchmarking
+
+```bash
+python -m pytest telescope/tests/test_1pct_pipeline.py -v -k "TestFullScale" -s
+```
+
+The full-scale tests (require 100% BAM) report per-stage timing and verify the
+complete pipeline runs under 60 seconds.
+
+## Architecture
+
+```
+telescope/
+├── __main__.py                  # Entry point, argparse routing
+├── telescope_assign.py          # assign subcommand
+├── telescope_resume.py          # resume subcommand
+├── utils/
+│   ├── model.py                 # Telescope orchestrator: BAM loading, matrix construction, Assigner
+│   ├── likelihood.py            # TelescopeLikelihood: EM algorithm (estep, mstep, em, em_parallel, reassign)
+│   ├── reporter.py              # output_report() + update_sam()
+│   ├── sparse_plus.py           # csr_matrix_plus: custom scipy CSR
+│   ├── cpu_optimized_sparse.py  # CpuOptimizedCsrMatrix: Numba JIT subclass
+│   ├── backend.py               # Backend auto-detection and dispatch
+│   ├── decompose.py             # Connected component block decomposition
+│   ├── alignment.py             # Fragment fetching, read pairing, _find_primary()
+│   ├── calignment.pyx/pxd       # Cython AlignedPair
+│   ├── annotation.py            # Annotation factory
+│   ├── helpers.py               # Utilities (phred, format_minutes, merge_overlapping_regions)
+│   └── __init__.py              # SubcommandOptions, configure_logging()
+├── tests/
+│   ├── test_annotation_parsers.py   # 8 tests
+│   ├── test_sparse_plus.py          # 45 tests
+│   ├── test_em.py                   # 33 tests
+│   ├── test_cpu_optimized_sparse.py # 33 tests
+│   ├── test_decomposition.py        # 10 tests
+│   ├── test_numerical_equivalence.py # 6 tests
+│   ├── test_1pct_pipeline.py        # 35 tests
+│   └── benchmark_1pct.py            # Benchmarking script
+└── data/
+    ├── alignment.bam
+    ├── annotation.gtf
+    └── telescope_report.tsv
+```
+
+## BAM Loading Paths
+
+1. **Indexed** (`_load_indexed`): For coordinate-sorted BAMs with `.bai` index.
+   Two-pass: fetches TE regions → buffers relevant fragments → processes identically
+   to sequential. 4-8x faster.
+
+2. **Sequential** (`_load_sequential`): For collated/name-sorted BAMs. Streams all
+   reads, groups by name, pairs and assigns.
+
+3. **Parallel** (`_load_parallel`): Multi-process variant of sequential for sorted BAMs.
+   Uses `multiprocessing` with temp files.
+
+Auto-detection in `load_alignment()`: indexed BAM + no `--updated_sam` → indexed path.
