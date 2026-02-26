@@ -9,9 +9,19 @@
 import yaml
 import logging
 from collections import OrderedDict
-# These are needed for eval statements:
-import sys
 import argparse
+
+from .console import Console
+
+# Safe type lookup for YAML-defined CLI options (replaces eval())
+_SAFE_TYPES = {
+    'int': int,
+    'float': float,
+    'str': str,
+    'bool': bool,
+    "argparse.FileType('r')": argparse.FileType('r'),
+    "argparse.FileType('w')": argparse.FileType('w'),
+}
 
 
 class SubcommandOptions(object):
@@ -52,7 +62,13 @@ class SubcommandOptions(object):
                     _arg_name = '--{}'.format(arg_name)
 
                 if 'type' in _d:
-                    _d['type'] = eval(_d['type'])
+                    _type_str = _d['type']
+                    if _type_str not in _SAFE_TYPES:
+                        raise ValueError(
+                            "Unsupported type '{}' in CLI option '{}'. "
+                            "Allowed: {}".format(_type_str, arg_name, list(_SAFE_TYPES.keys()))
+                        )
+                    _d['type'] = _SAFE_TYPES[_type_str]
 
                 argparse_grp.add_argument(_arg_name, **_d)
 
@@ -83,26 +99,45 @@ class SubcommandOptions(object):
 
 
 def configure_logging(opts):
-    """ Configure logging options
+    """Configure logging and create Console for structured stdout output.
 
     Args:
         opts: SubcommandOptions object. Important attributes are "quiet",
-              "debug", and "logfile"
-    Returns:  None
+              "verbose", "debug", and "logfile".
+    Returns:
+        Console instance for structured stdout output.
     """
-    loglev = logging.INFO
-    if opts.quiet:
-        loglev = logging.WARNING
-    if opts.debug:
-        loglev = logging.DEBUG
+    _quiet = getattr(opts, 'quiet', False)
+    _verbose = getattr(opts, 'verbose', False)
+    _debug = getattr(opts, 'debug', False)
 
-    logfmt = '%(asctime)s %(levelname)-8s %(message)-60s'
-    logfmt += ' (from %(funcName)s in %(filename)s:%(lineno)d)'
+    # Console level (stdout)
+    if _quiet:
+        console_level = Console.QUIET
+    elif _debug:
+        console_level = Console.DEBUG
+    elif _verbose:
+        console_level = Console.VERBOSE
+    else:
+        console_level = Console.NORMAL
+
+    # Logging level (stderr) — default is WARNING so normal mode is clean
+    if _debug:
+        loglev = logging.DEBUG
+        logfmt = '%(asctime)s %(levelname)-8s %(message)-60s (%(funcName)s in %(filename)s:%(lineno)d)'
+    elif _verbose:
+        loglev = logging.INFO
+        logfmt = '%(asctime)s %(levelname)-8s %(message)s'
+    else:
+        loglev = logging.WARNING
+        logfmt = '%(asctime)s %(levelname)-8s %(message)s'
+
     logging.basicConfig(level=loglev,
                         format=logfmt,
                         datefmt='%Y-%m-%d %H:%M:%S',
                         stream=opts.logfile)
-    return
+
+    return Console(level=console_level)
 
 # A very large integer
 BIG_INT = 2**32 - 1

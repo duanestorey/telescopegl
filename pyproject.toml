@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=64", "cython", "numpy", "pysam"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "polymerase"
+version = "2.0.0"
+description = "Single locus resolution of Transposable Element expression using next-generation sequencing."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    {name = "Matthew L. Bendall", email = "bendall@gwu.edu"},
+    {name = "Duane Storey"},
+]
+
+dependencies = [
+    "pyyaml",
+    "cython",
+    "numpy>=1.16.3",
+    "scipy>=1.2.1",
+    "pysam>=0.15.2",
+    "intervaltree>=3.0.2",
+    "pandas",
+]
+
+[project.optional-dependencies]
+optimized = ["sparse-dot-mkl", "numba", "threadpoolctl"]
+gpu = ["cupy"]
+
+[project.scripts]
+polymerase = "polymerase.__main__:main"
+
+[project.entry-points."polymerase.primers"]
+assign = "polymerase.plugins.builtin.assign:AssignPrimer"
+
+[project.entry-points."polymerase.cofactors"]
+family-agg = "polymerase.plugins.builtin.family_agg:FamilyAggCofactor"
+normalize = "polymerase.plugins.builtin.normalize:NormalizeCofactor"
+
+[project.urls]
+Homepage = "https://github.com/duanestorey/polymerase"
+
+[tool.setuptools.packages.find]
+include = ["polymerase*"]
+
+[tool.setuptools.package-data]
+polymerase = [
+    "data/alignment.bam",
+    "data/annotation.gtf",
+    "data/report.tsv",
+]

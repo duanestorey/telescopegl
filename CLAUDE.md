@@ -7,8 +7,10 @@ Polymerase resolves multi-mapped RNA-seq reads to transposable element (TE) loci
 ## Pipeline Overview
 
 ```
-Load BAM -> Build sparse matrix -> Run EM -> Reassign reads -> Generate reports
+Load BAM -> Build sparse matrix -> Notify primers -> Primers commit -> Cofactors transform
 ```
+
+The platform loads BAM/GTF once and builds the sparse score matrix, then delegates to discoverable **primers** (analysis plugins) and **cofactors** (post-processors) via a plugin registry. The built-in `assign` primer runs the EM algorithm. Cofactors (`family-agg`, `normalize`) transform primer output.
 
 Two BAM loading paths:
 - **Sequential** (collated BAM): Streams all reads, pairs by name
@@ -22,18 +24,40 @@ Two BAM loading paths:
 |------|---------|
 | `polymerase/core/model.py` | `Polymerase` class: BAM loading (`_load_sequential`, `_load_indexed`, `_load_parallel`), matrix construction, `Assigner` |
 | `polymerase/core/likelihood.py` | `PolymeraseLikelihood` class: EM algorithm (estep, mstep, lnl, em, em_parallel, reassign) |
-| `polymerase/core/reporter.py` | `output_report()` + `update_sam()` -- I/O separated from algorithm |
+| `polymerase/core/reporter.py` | `output_report()` + `update_sam()` -- decoupled from Polymerase object, takes individual data pieces |
 | `polymerase/sparse/matrix.py` | `csr_matrix_plus` -- extends scipy CSR with `norm`, `scale`, `binmax`, `choose_random`, `apply_func`, `count`, `threshold_filter`, `indicator` |
-| `polymerase/cli/assign.py` | `assign` subcommand: CLI options (`BulkIDOptions`, `scIDOptions`), `run()` orchestrator |
-| `polymerase/cli/resume.py` | `resume` subcommand: loads checkpoint, re-runs EM with different params |
-| `polymerase/__main__.py` | Entry point, argparse subcommand routing |
-| `polymerase/cli/__init__.py` | `SubcommandOptions` base class (YAML-based CLI), `configure_logging()`, `BIG_INT` |
+| `polymerase/cli/assign.py` | `assign` subcommand: CLI options (`BulkIDOptions`, `scIDOptions`), `run()` thin platform orchestrator (loads data, builds snapshots, delegates to registry) |
+| `polymerase/cli/resume.py` | `resume` subcommand: loads checkpoint, builds snapshot, delegates to registry |
+| `polymerase/cli/plugins.py` | `list-plugins` and `install` subcommands for plugin management |
+| `polymerase/__main__.py` | Entry point, argparse subcommand routing (`assign`, `resume`, `test`, `list-plugins`, `install`) |
+| `polymerase/cli/__init__.py` | `SubcommandOptions` base class (YAML-based CLI), `configure_logging()`, `BIG_INT`, `_SAFE_TYPES` |
+
+### Plugin Architecture Files
+
+| File | Purpose |
+|------|---------|
+| `polymerase/plugins/__init__.py` | Re-exports `Primer`, `Cofactor`, `AnnotationSnapshot`, `AlignmentSnapshot`, `PluginRegistry` |
+| `polymerase/plugins/abc.py` | `Primer` and `Cofactor` abstract base classes with lifecycle hooks |
+| `polymerase/plugins/snapshots.py` | `AnnotationSnapshot` and `AlignmentSnapshot` frozen dataclasses |
+| `polymerase/plugins/registry.py` | `PluginRegistry`: discovery, configure, notify, commit lifecycle |
+| `polymerase/plugins/builtin/assign.py` | `AssignPrimer`: the EM pipeline as a primer (seeds RNG, runs EM, writes reports) |
+| `polymerase/plugins/builtin/family_agg.py` | `FamilyAggCofactor`: aggregates assign counts by repFamily/repClass |
+| `polymerase/plugins/builtin/normalize.py` | `NormalizeCofactor`: computes TPM, RPKM, CPM from assign counts |
+
+### Compute Abstraction Files
+
+| File | Purpose |
+|------|---------|
+| `polymerase/compute/__init__.py` | Exports `get_ops()` → returns `CpuOps` or `GpuOps` based on backend |
+| `polymerase/compute/ops.py` | `ComputeOps` ABC: 17 abstract methods (dot, norm, scale, svd, pca, nnls, etc.) |
+| `polymerase/compute/cpu_ops.py` | `CpuOps(ComputeOps)`: scipy.sparse + numpy implementations |
+| `polymerase/compute/gpu_ops.py` | `GpuOps(ComputeOps)`: CuPy/cuSPARSE implementations (falls back to CPU for nnls/nmf) |
 
 ### Optimization Files
 
 | File | Purpose |
 |------|---------|
-| `polymerase/sparse/backend.py` | Two-tier backend: CPU-Optimized/Numba+MKL -> Stock CPU/scipy. Auto-detection via `configure()` / `get_backend()` / `get_sparse_class()` |
+| `polymerase/sparse/backend.py` | Three-tier backend: GPU/CuPy -> CPU-Optimized/Numba+MKL -> Stock CPU/scipy. Auto-detection via `configure()` / `get_backend()` / `get_sparse_class()` |
 | `polymerase/sparse/numba_matrix.py` | `CpuOptimizedCsrMatrix(csr_matrix_plus)` -- Numba JIT kernels for `binmax`, `choose_random`, `threshold_filter`, `indicator` |
 | `polymerase/sparse/decompose.py` | Connected component block decomposition: `find_blocks()`, `split_matrix()`, `merge_results()` |
 
@@ -101,9 +125,33 @@ Options are defined as YAML strings in `BulkIDOptions.OPTS` / `scIDOptions.OPTS`
 - Test data has 1 connected component (all ERVK family)
 - 100% data: 75,121 fragments x 4,372 features, 2,794 components
 
+## Plugin Architecture
+
+### Platform Hooks
+| Hook | Data Provided | When |
+|------|---------------|------|
+| `on_annotation_loaded` | `AnnotationSnapshot` (loci, feature_lengths, gtf_path, attribute_name) | After GTF parsed |
+| `on_matrix_built` | `AlignmentSnapshot` (sparse matrix, read/feat indices, BAM path, run_info) | After BAM→matrix |
+
+### Plugin Lifecycle
+1. `PluginRegistry.discover()` — finds primers/cofactors via `importlib.metadata.entry_points`
+2. `registry.configure_all(opts, compute_ops)` — passes CLI opts + `ComputeOps` to all plugins
+3. `registry.notify('on_annotation_loaded', snapshot)` — fires annotation hook
+4. `registry.notify('on_matrix_built', snapshot)` — fires matrix hook
+5. `registry.commit_all(output_dir, exp_tag)` — each primer commits, then its cofactors run
+
+### Entry Points (pyproject.toml)
+```
+polymerase.primers: assign → AssignPrimer
+polymerase.cofactors: family-agg → FamilyAggCofactor, normalize → NormalizeCofactor
+```
+
+### ComputeOps
+Backend-agnostic math API. Primers call `ops.dot()`, `ops.norm()`, `ops.svd()`, etc. `get_ops()` returns `CpuOps` or `GpuOps` based on `backend.get_backend()`.
+
 ## Tests
 
-170 tests across 7 test files:
+211 tests across 9 test files:
 - `test_annotation_parsers.py` -- 8 tests
 - `test_sparse_plus.py` -- 45 tests
 - `test_em.py` -- 33 tests (EM + baseline equivalence)
@@ -111,6 +159,8 @@ Options are defined as YAML strings in `BulkIDOptions.OPTS` / `scIDOptions.OPTS`
 - `test_decomposition.py` -- 10 tests (block decomposition)
 - `test_numerical_equivalence.py` -- 6 tests (cross-backend)
 - `test_1pct_pipeline.py` -- 35 tests (1%/5%/100% BAM pipeline, indexed path equivalence)
+- `test_compute.py` -- 19 tests (ComputeOps/CpuOps methods)
+- `test_plugins.py` -- 22 tests (ABCs, snapshots, registry, assign primer, cofactors)
 
 ## Key Conventions
 

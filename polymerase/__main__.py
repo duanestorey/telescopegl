@@ -18,24 +18,21 @@ import errno
 from polymerase import __version__
 from .cli import assign as cli_assign
 from .cli import resume as cli_resume
+from .cli import plugins as cli_plugins
 
 
-USAGE   = ''' %(prog)s <command> [<args>]
+USAGE = ''' %(prog)s <command> [<args>]
 
 The most commonly used commands are:
-   assign    Reassign ambiguous fragments that map to repetitive elements
-   resume    Resume previous run from checkpoint file
-   test      Generate a command line for testing
+   assign         Reassign ambiguous fragments that map to repetitive elements
+   resume         Resume previous run from checkpoint file
+   list-plugins   List installed primers and cofactors
+   install        Install a primer/cofactor package
+   test           Generate a command line for testing
 
 '''
 
 def generate_test_command(args):
-    try:
-        _ = FileNotFoundError()
-    except NameError:
-        class FileNotFoundError(OSError):
-            pass
-
     _base = os.path.dirname(os.path.abspath(__file__))
     _data_path = os.path.join(_base, 'data')
     _alnpath = os.path.join(_data_path, 'alignment.bam')
@@ -76,7 +73,7 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     cli_assign.BulkIDOptions.add_arguments(assign_parser)
-    assign_parser.set_defaults(func=lambda args: cli_assign.run(args, sc = False))
+    assign_parser.set_defaults(func=lambda args: cli_assign.run(args, sc=False))
 
     ''' Parser for bulk RNA-seq resume '''
     resume_parser = subparser.add_parser('resume',
@@ -84,8 +81,22 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     cli_resume.BulkResumeOptions.add_arguments(resume_parser)
-    resume_parser.set_defaults(func=lambda args: cli_resume.run(args, sc = False))
+    resume_parser.set_defaults(func=lambda args: cli_resume.run(args, sc=False))
 
+    ''' Parser for list-plugins '''
+    list_plugins_parser = subparser.add_parser('list-plugins',
+        description='''List installed primers and cofactors''',
+    )
+    list_plugins_parser.set_defaults(func=cli_plugins.list_plugins)
+
+    ''' Parser for install '''
+    install_parser = subparser.add_parser('install',
+        description='''Install a primer/cofactor package''',
+    )
+    install_parser.add_argument('package', help='Package name to install (e.g. polymerase-primer-chimeric)')
+    install_parser.set_defaults(func=cli_plugins.install_plugin)
+
+    ''' Parser for test '''
     test_parser = subparser.add_parser('test',
         description='''Print a test command''',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,

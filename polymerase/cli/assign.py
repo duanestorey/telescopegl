@@ -23,7 +23,12 @@ import numpy as np
 from . import SubcommandOptions, configure_logging
 from ..utils.helpers import format_minutes as fmtmins
 from ..core.model import Polymerase, scPolymerase
-from ..core.likelihood import PolymeraseLikelihood
+
+# Default bundled GTF annotation (retro.hg38 from telescope_annotation_db)
+_DEFAULT_GTF = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'data', 'retro.hg38.gtf',
+)
 from ..annotation import get_annotation_class
 from ..sparse import backend
 
@@ -35,6 +40,11 @@ class IDOptions(SubcommandOptions):
         self.sc = sc
         if self.logfile is None:
             self.logfile = sys.stderr
+
+        # Default to bundled retro.hg38 annotation if no GTF specified
+        if getattr(self, 'gtffile', None) is None:
+            self.gtffile = _DEFAULT_GTF
+            lg.info('Using bundled annotation: %s', os.path.basename(self.gtffile))
 
         if hasattr(self, 'tempdir') and self.tempdir is None:
             if hasattr(self, 'ncpu') and self.ncpu > 1:
@@ -56,7 +66,9 @@ class BulkIDOptions(IDOptions):
                   read pair appear sequentially in the file.
         - gtffile:
             positional: True
-            help: Path to annotation file (GTF format)
+            nargs: "?"
+            help: Path to annotation file (GTF format). If omitted, uses the
+                  bundled retro.hg38 TE annotation.
         - attribute:
             default: locus
             help: GTF attribute that defines a transposable element locus. GTF
@@ -78,6 +90,9 @@ class BulkIDOptions(IDOptions):
         - quiet:
             action: store_true
             help: Silence (most) output.
+        - verbose:
+            action: store_true
+            help: Show detailed progress including EM iterations and timing.
         - debug:
             action: store_true
             help: Print debug messages.
@@ -217,7 +232,9 @@ class scIDOptions(IDOptions):
                   read pair appear sequentially in the file.
         - gtffile:
             positional: True
-            help: Path to annotation file (GTF format)
+            nargs: "?"
+            help: Path to annotation file (GTF format). If omitted, uses the
+                  bundled retro.hg38 TE annotation.
         - barcode_tag:
             type: str
             default: CB
@@ -243,6 +260,9 @@ class scIDOptions(IDOptions):
         - quiet:
             action: store_true
             help: Silence (most) output.
+        - verbose:
+            action: store_true
+            help: Show detailed progress including EM iterations and timing.
         - debug:
             action: store_true
             help: Print debug messages.
@@ -379,87 +399,148 @@ class scIDOptions(IDOptions):
     """
 
 
-def run(args, sc = True):
-    """
+def _parse_primers_arg(opts):
+    """Parse --primers CLI arg into a list of primer names, or None for all."""
+    raw = getattr(opts, 'primers', None)
+    if raw is None or raw == 'all':
+        return None
+    return [p.strip() for p in raw.split(',') if p.strip()]
+
+
+def _backend_display_name(be):
+    """Human-readable backend name for console output."""
+    names = {
+        'gpu': 'GPU (CuPy)',
+        'cpu_optimized': 'CPU-Optimized (Numba)',
+        'cpu_stock': 'CPU (scipy)',
+    }
+    return names.get(be.name, be.name)
+
+
+def run(args, sc=True):
+    """Platform orchestrator: loads data, builds snapshots, delegates to primers.
 
     Args:
-        args:
-
-    Returns:
-
+        args: Parsed argparse namespace.
+        sc: True for single-cell mode.
     """
-    option_class = scIDOptions if sc == True else BulkIDOptions
-    opts = option_class(args, sc = sc)
-    configure_logging(opts)
+    from ..plugins.snapshots import AnnotationSnapshot, AlignmentSnapshot
+    from ..plugins.registry import PluginRegistry
+    from ..compute import get_ops
+
+    option_class = scIDOptions if sc else BulkIDOptions
+    opts = option_class(args, sc=sc)
+    console = configure_logging(opts)
     backend.configure()
     lg.info('\n{}\n'.format(opts))
     total_time = time()
 
-    ''' Create Polymerase object '''
-    ts = scPolymerase(opts) if sc == True else Polymerase(opts)
+    # Banner
+    console.banner(opts.version)
 
-    ''' Load annotation '''
+    # Input section
+    _be = backend.get_backend()
+    _bam_name = os.path.basename(opts.samfile)
+    _gtf_name = os.path.basename(opts.gtffile)
+    _using_bundled = (os.path.abspath(opts.gtffile) == os.path.abspath(_DEFAULT_GTF))
+
+    console.section('Input')
+    console.item('BAM', _bam_name)
+    if _using_bundled:
+        console.item('Annotation', '{} [bundled]'.format(_gtf_name))
+    else:
+        console.item('Annotation', _gtf_name)
+    console.item('Backend', _backend_display_name(_be))
+    console.blank()
+
+    # --- Platform: Load Data ---
+    ts = scPolymerase(opts) if sc else Polymerase(opts)
+
     Annotation = get_annotation_class(opts.annotation_class)
     lg.info('Loading annotation...')
     stime = time()
     annot = Annotation(opts.gtffile, opts.attribute, opts.stranded_mode)
-    lg.info("Loaded annotation in {}".format(fmtmins(time() - stime)))
+    _annot_elapsed = time() - stime
+    lg.info("Loaded annotation in {}".format(fmtmins(_annot_elapsed)))
     lg.info('Loaded {} features.'.format(len(annot.loci)))
+    console.verbose('Loaded annotation: {:,} features ({:.1f}s)'.format(
+        len(annot.loci), _annot_elapsed))
 
-    # annot.save(opts.outfile_path('test_annotation.p'))
-
-    ''' Load alignments '''
     lg.info('Loading alignments...')
     stime = time()
     ts.load_alignment(annot)
-    lg.info("Loaded alignment in {}".format(fmtmins(time() - stime)))
+    _aln_elapsed = time() - stime
+    lg.info("Loaded alignment in {}".format(fmtmins(_aln_elapsed)))
 
-    ''' Print alignment summary '''
     ts.print_summary(lg.INFO)
-    # if opts.ncpu > 1:
-    #     sys.exit('not implemented yet')
 
-    ''' Exit if no overlap '''
-    if ts.run_info['overlap_unique'] + ts.run_info['overlap_ambig'] == 0:
-        lg.info("No alignments overlapping annotation")
+    _ri = ts.run_info
+    _total = int(_ri.get('total_fragments', 0))
+    _unique = int(_ri.get('overlap_unique', 0))
+    _ambig = int(_ri.get('overlap_ambig', 0))
+    _overlap = _unique + _ambig
+
+    console.status('Loading alignment... done ({:.1f}s)'.format(_aln_elapsed))
+    console.detail('{:,} fragments \u2014 {:,} overlap annotation ({:,} unique, {:,} ambiguous)'.format(
+        _total, _overlap, _unique, _ambig))
+    console.blank()
+
+    if _overlap == 0:
+        console.status('No alignments overlapping annotation.')
         lg.info("polymerase assign complete (%s)" % fmtmins(time() - total_time))
         return
 
-    ''' Free up memory used by annotation '''
-    annot = None
+    # --- Platform: Build Snapshots ---
+    annot_snapshot = AnnotationSnapshot(
+        loci=dict(annot.loci),
+        feature_lengths=annot.feature_length(),
+        num_features=len(annot.loci),
+        gtf_path=opts.gtffile,
+        attribute_name=opts.attribute,
+    )
+
+    annot = None  # free memory
     lg.debug('garbage: {:d}'.format(gc.collect()))
 
-    ''' Save object checkpoint '''
     ts.save(opts.outfile_path('checkpoint'))
-    if opts.skip_em:
-        lg.info("Skipping EM...")
-        lg.info("polymerase assign complete (%s)" % fmtmins(time()-total_time))
-        return
 
-    ''' Seed RNG '''
-    seed = ts.get_random_seed()
-    lg.debug("Random seed: {}".format(seed))
-    np.random.seed(seed)
+    alignment_snapshot = AlignmentSnapshot(
+        bam_path=opts.samfile,
+        run_info=dict(ts.run_info),
+        read_index=dict(ts.read_index),
+        feat_index=dict(ts.feat_index),
+        shape=ts.shape,
+        raw_scores=ts.raw_scores,
+        feature_lengths=dict(ts.feature_length),
+    )
 
-    ''' Create likelihood '''
-    ts_model = PolymeraseLikelihood(ts.raw_scores, opts)
+    # Stash tmp_bam path on opts so the assign primer can find it for updated_sam
+    if hasattr(ts, 'tmp_bam'):
+        opts._tmp_bam_path = ts.tmp_bam
 
-    ''' Run Expectation-Maximization '''
-    lg.info('Running Expectation-Maximization...')
-    stime = time()
-    if getattr(opts, 'parallel_blocks', False):
-        ts_model.em_parallel(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
-    else:
-        ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
-    lg.info("EM completed in %s" % fmtmins(time() - stime))
+    # --- Platform: Discover & Run Primers ---
+    registry = PluginRegistry()
+    registry.discover(active_primers=_parse_primers_arg(opts))
+    registry.configure_all(opts, get_ops())
 
-    # Output final report
-    lg.info("Generating Report...")
-    ts.output_report(ts_model, opts.outfile_path('run_stats.tsv'), opts.outfile_path('TE_counts.tsv'))
+    # Show loaded plugins
+    console.section('Primers')
+    for p in registry.primers:
+        console.plugin(p.name, p.description, p.version)
+    console.blank()
 
-    if opts.updated_sam:
-        lg.info("Creating updated SAM file...")
-        ts.update_sam(ts_model, opts.outfile_path('updated.bam'))
+    if registry.cofactors:
+        console.section('Cofactors')
+        for c in registry.cofactors:
+            console.plugin(c.name, c.description)
+        console.blank()
 
+    registry.notify('on_annotation_loaded', annot_snapshot)
+    registry.notify('on_matrix_built', alignment_snapshot)
+    registry.commit_all(opts.outdir, opts.exp_tag, console=console)
+
+    # Completion
+    console.blank()
+    console.status('Completed in {:.1f}s'.format(time() - total_time))
+    console.blank()
     lg.info("polymerase assign complete (%s)" % fmtmins(time() - total_time))
-    return

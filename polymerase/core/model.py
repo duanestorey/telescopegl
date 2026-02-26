@@ -147,12 +147,24 @@ class Polymerase(object):
         with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
                                  threads=_threads) as sf:
             self.has_index = sf.has_index()
-            if self.has_index:
-                self.run_info['nmap_idx'] = sf.mapped
-                self.run_info['nunmap_idx'] = sf.unmapped
-
+            _is_coordinate_sorted = (
+                sf.header.get('HD', {}).get('SO') == 'coordinate'
+            )
             self.ref_names = sf.references
             self.ref_lengths = sf.lengths
+
+        # Auto-create .bai index for coordinate-sorted BAMs without one
+        if not self.has_index and _is_coordinate_sorted:
+            lg.info('Coordinate-sorted BAM without index — creating .bai')
+            pysam.index(self.opts.samfile)
+            self.has_index = True
+
+        # Read mapped/unmapped counts from index
+        if self.has_index:
+            with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
+                                     threads=_threads) as sf:
+                self.run_info['nmap_idx'] = sf.mapped
+                self.run_info['nunmap_idx'] = sf.unmapped
 
         return
 
@@ -583,11 +595,18 @@ class Polymerase(object):
 
     def output_report(self, tl, stats_filename, counts_filename):
         """Generate TSV reports. Delegates to reporter.output_report()."""
-        return _output_report_func(self, tl, stats_filename, counts_filename)
+        return _output_report_func(
+            self.feat_index, self.feature_length, self.run_info, tl,
+            self.opts.reassign_mode, self.opts.conf_prob,
+            stats_filename, counts_filename,
+        )
 
     def update_sam(self, tl, filename):
         """Update SAM file. Delegates to reporter.update_sam()."""
-        return _update_sam_func(self, tl, filename)
+        return _update_sam_func(
+            self.tmp_bam, self.read_index, self.feat_index,
+            self.run_info, self.opts, tl, filename,
+        )
 
     def print_summary(self, loglev=lg.WARNING):
         _d = Counter()

@@ -1,18 +1,10 @@
 # -*- coding: utf-8 -*-
-""" Setup polymerase package
+"""Setup polymerase package
 
+Retained for Cython ext_modules support. Metadata is in pyproject.toml.
 """
-from __future__ import print_function
-
 from os import path, environ
-from distutils.core import setup
-from setuptools import Extension
-from setuptools import find_packages
-
-import versioneer
-
-__author__ = 'Matthew L. Bendall'
-__copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
+from setuptools import setup, Extension, find_packages
 
 USE_CYTHON = True
 
@@ -24,7 +16,7 @@ htslib_include_dirs = [
     path.join(CONDA_PREFIX, 'include'),
     path.join(CONDA_PREFIX, 'include', 'htslib'),
 ]
-htslib_include_dirs = [d for d in htslib_include_dirs if path.exists(str(d)) ]
+htslib_include_dirs = [d for d in htslib_include_dirs if path.exists(str(d))]
 
 # Add pysam include dirs for cimport resolution and C headers
 try:
@@ -36,7 +28,7 @@ except (ImportError, IndexError):
 ext = '.pyx' if USE_CYTHON else '.c'
 extensions = [
     Extension("polymerase.alignment.calignment",
-              ["polymerase/alignment/calignment"+ext],
+              ["polymerase/alignment/calignment" + ext],
               include_dirs=htslib_include_dirs,
               ),
 ]
@@ -47,51 +39,5 @@ if USE_CYTHON:
                            include_path=['polymerase/alignment'] + htslib_include_dirs)
 
 setup(
-    name='polymerase',
-    version=versioneer.get_version(),
-    cmdclass=versioneer.get_cmdclass(),
-    packages=find_packages(),
-
-    install_requires=[
-        'future',
-        'pyyaml',
-        'cython',
-        'numpy>=1.16.3',
-        'scipy>=1.2.1',
-        'pysam>=0.15.2',
-        'intervaltree>=3.0.2',
-    ],
-
-    extras_require={
-        'optimized': ['sparse-dot-mkl', 'numba', 'threadpoolctl'],
-    },
-
-    # Runnable scripts
-    entry_points={
-        'console_scripts': [
-            'polymerase=polymerase.__main__:main',
-        ],
-    },
-
-    # cython
     ext_modules=extensions,
-
-    # data
-    package_data = {
-        'polymerase': [
-            'data/alignment.bam',
-            'data/annotation.gtf',
-            'data/report.tsv'
-        ],
-    },
-
-    # metadata for upload to PyPI
-    author='Matthew L. Bendall',
-    author_email='bendall@gwu.edu',
-    description='Single locus resolution of Transposable ELEment expression using next-generation sequencing.',
-    license='MIT',
-    keywords='',
-    url='https://github.com/duanestorey/polymerase',
-
-    zip_safe=False
 )

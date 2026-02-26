@@ -14,9 +14,16 @@ Polymerase
 * [Usage](#usage)
   * [`polymerase assign`](#polymerase-assign)
   * [`polymerase resume`](#polymerase-resume)
+  * [`polymerase list-plugins`](#polymerase-list-plugins)
+  * [`polymerase install`](#polymerase-install)
+* [Plugin Architecture](#plugin-architecture)
+  * [Primers](#primers)
+  * [Cofactors](#cofactors)
+  * [Writing a Plugin](#writing-a-plugin)
 * [Output](#Output)
   * [Polymerase report](#polymerase-report)
   * [Updated SAM file](#updated-sam-file)
+  * [Cofactor output](#cofactor-output)
 * [Version History](#version-history)
 
 ## Installation
@@ -206,6 +213,35 @@ Performance Options:
 ```
 
 
+### `polymerase list-plugins`
+
+List all installed primers and cofactors:
+
+```
+polymerase list-plugins
+```
+
+Example output:
+```
+Primers:
+  assign               v2.0.0      Quantify TE expression using Expectation-Maximization (built-in)
+
+Cofactors:
+  family-agg           for assign     Aggregate TE counts by repFamily and repClass (built-in)
+  normalize            for assign     Compute TPM, RPKM, and CPM normalized counts (built-in)
+```
+
+### `polymerase install`
+
+Install a third-party primer or cofactor package:
+
+```
+polymerase install polymerase-primer-chimeric
+```
+
+This wraps `pip install` and registers the plugin's entry_points so it is
+discovered automatically on the next run.
+
 ### `polymerase resume`
 
 The `polymerase resume` program loads the checkpoint from a previous run and
@@ -281,11 +317,54 @@ Model Parameters:
                         criteria. (default: False)
 ```
 
+## Plugin Architecture
+
+Polymerase v2.0.0 introduces a plugin architecture where the core platform
+loads BAM files and builds sparse matrices once, then hands that data to any
+number of **primers** (analysis plugins) and **cofactors** (post-processors).
+
+### Primers
+
+A primer receives annotation and alignment data via platform hooks, then
+produces its own output. The built-in `assign` primer runs the EM algorithm
+and writes counts — this is the original Telescope/Polymerase pipeline.
+
+Third-party primers (e.g. chimeric transcript detection, read-through analysis)
+can be installed as separate packages and are discovered automatically via
+Python entry_points.
+
+### Cofactors
+
+A cofactor transforms a specific primer's committed output. Built-in cofactors:
+
+- **`family-agg`** — aggregates assign counts by `repFamily` and `repClass` from the GTF
+- **`normalize`** — computes TPM, RPKM, and CPM from assign counts and feature lengths
+
+Cofactors run automatically after their parent primer commits.
+
+### Writing a Plugin
+
+Primers subclass `polymerase.plugins.Primer` and cofactors subclass
+`polymerase.plugins.Cofactor`. Register them in your package's `pyproject.toml`:
+
+```toml
+[project.entry-points."polymerase.primers"]
+my-primer = "my_package:MyPrimer"
+
+[project.entry-points."polymerase.cofactors"]
+my-cofactor = "my_package:MyCofactor"
+```
+
+Primers receive frozen snapshots via `on_annotation_loaded()` and
+`on_matrix_built()` hooks, then write output in `commit()`. A `ComputeOps`
+instance is provided via `configure()` for backend-agnostic math (CPU, Numba,
+or GPU automatically).
+
 ## Output
 
 Polymerase has three main output files: the transcript counts estimated via EM (`polymerase-TE_counts.tsv`),
 a statistical report of the run containing model parameters and additional information
-(`polymerase-stats_report.tsv`), and an updated SAM file (optional).
+(`polymerase-run_stats.tsv`), and an updated SAM file (optional).
 The count file is most important for downstream differential
 expression analysis. The updated SAM file is useful for downstream locus-specific analyses.
 
@@ -332,3 +411,14 @@ encoded in the SAM tags:
 UCSC sanctioned tag, see documentation
 [here.](http://genome.ucsc.edu/goldenpath/help/hgBamTrackHelp.html)
 + `XP:Z` Alignment probability - estimated posterior probability for this alignment.
+
+### Cofactor output
+
+When cofactors are active (the default), additional output files are produced:
+
+**`family-agg` cofactor:**
+- `{tag}-family_counts.tsv` — counts aggregated by `repFamily` (e.g. HERVK, L1, Alu)
+- `{tag}-class_counts.tsv` — counts aggregated by `repClass` (e.g. LTR, LINE, SINE)
+
+**`normalize` cofactor:**
+- `{tag}-normalized_counts.tsv` — per-locus TPM, RPKM, and CPM values alongside raw counts

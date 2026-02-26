@@ -86,6 +86,9 @@ class PolymeraseLikelihood(object):
         self._pi_prior_wt = self.pi_prior * self._weights.max()
         self._theta_prior_wt = self.theta_prior * self._weights.max()
         self._pisum0 = self.Q.multiply(1-self.Y).sum(0)
+
+        # Iteration count (set by em() or em_parallel())
+        self.num_iterations = 0
         lg.debug('done initializing model')
 
     def estep(self, pi, theta):
@@ -148,11 +151,11 @@ class PolymeraseLikelihood(object):
             if use_likelihood:
                 _lnl = self.calculate_lnl(_z, _pi, _theta)
                 diff_lnl = abs(_lnl - self.lnl)
-                lg.log(loglev, msgL.format(inum, _lnl, diff_est))
+                lg.debug(msgL.format(inum, _lnl, diff_est))
                 converged = diff_lnl < self.epsilon
                 self.lnl = _lnl
             else:
-                lg.log(loglev, msgD.format(inum, diff_est))
+                lg.debug(msgD.format(inum, diff_est))
                 converged = diff_est < self.epsilon
 
             reached_max = inum >= self.max_iter
@@ -164,6 +167,7 @@ class PolymeraseLikelihood(object):
         if not use_likelihood:
             self.lnl = self.calculate_lnl(self.z, self.pi, self.theta)
 
+        self.num_iterations = inum
         lg.log(loglev, 'EM {:s} after {:d} iterations.'.format(_con, inum))
         lg.log(loglev, 'Final log-likelihood: {:f}.'.format(self.lnl))
         return
@@ -290,6 +294,7 @@ class PolymeraseLikelihood(object):
         # Set pi_init from first block (approximate)
         self.pi_init = pi.copy()
 
+        self.num_iterations = self.max_iter  # approximate (blocks converge independently)
         lg.log(loglev, 'EM parallel completed across {} blocks.'.format(n_components))
         lg.log(loglev, 'Final log-likelihood: {:f}.'.format(self.lnl))
         return

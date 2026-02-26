@@ -21,7 +21,6 @@ from . import configure_logging
 from ..utils.helpers import format_minutes as fmtmins
 
 from ..core.model import Polymerase, scPolymerase
-from ..core.likelihood import PolymeraseLikelihood
 from .assign import IDOptions
 from ..sparse import backend
 
@@ -35,6 +34,9 @@ class BulkResumeOptions(IDOptions):
         - quiet:
             action: store_true
             help: Silence (most) output.
+        - verbose:
+            action: store_true
+            help: Show detailed progress including EM iterations and timing.
         - debug:
             action: store_true
             help: Print debug messages.
@@ -117,6 +119,9 @@ class scResumeOptions(IDOptions):
         - quiet:
             action: store_true
             help: Silence (most) output.
+        - verbose:
+            action: store_true
+            help: Show detailed progress including EM iterations and timing.
         - debug:
             action: store_true
             help: Print debug messages.
@@ -188,57 +193,86 @@ class scResumeOptions(IDOptions):
             help: Decompose into independent blocks and solve in parallel.
     """
 
-def run(args, sc = True):
-    """
+def run(args, sc=True):
+    """Resume from checkpoint: load saved matrix and run EM via primers.
 
     Args:
-        args:
-
-    Returns:
-
+        args: Parsed argparse namespace.
+        sc: True for single-cell mode.
     """
-    option_class = scResumeOptions if sc == True else BulkResumeOptions
-    opts = option_class(args, sc = sc)
-    configure_logging(opts)
+    from ..plugins.snapshots import AlignmentSnapshot
+    from ..plugins.registry import PluginRegistry
+    from ..compute import get_ops
+
+    option_class = scResumeOptions if sc else BulkResumeOptions
+    opts = option_class(args, sc=sc)
+    console = configure_logging(opts)
     backend.configure()
     lg.info('\n{}\n'.format(opts))
     total_time = time()
 
-    ''' Create Polymerase object '''
+    # Banner
+    console.banner(opts.version)
+
+    console.section('Input')
+    console.item('Checkpoint', os.path.basename(opts.checkpoint))
+    from .assign import _backend_display_name
+    console.item('Backend', _backend_display_name(backend.get_backend()))
+    console.blank()
+
+    # Load checkpoint
     lg.info('Loading Polymerase object from file...')
-    Polymerase_class = scPolymerase if sc == True else Polymerase
+    stime = time()
+    Polymerase_class = scPolymerase if sc else Polymerase
     ts = Polymerase_class.load(opts.checkpoint)
     ts.opts = opts
+    _load_elapsed = time() - stime
 
-    ''' Print alignment summary '''
     ts.print_summary(lg.INFO)
 
-    ''' Seed RNG '''
-    seed = ts.get_random_seed()
-    lg.debug("Random seed: {}".format(seed))
-    np.random.seed(seed)
+    _ri = ts.run_info
+    _unique = int(_ri.get('overlap_unique', 0))
+    _ambig = int(_ri.get('overlap_ambig', 0))
+    _overlap = _unique + _ambig
 
+    console.status('Loaded checkpoint ({:.1f}s)'.format(_load_elapsed))
+    console.detail('{:,} overlap annotation ({:,} unique, {:,} ambiguous)'.format(
+        _overlap, _unique, _ambig))
+    console.blank()
 
-    ''' Create likelihood '''
-    ts_model = PolymeraseLikelihood(ts.raw_scores, opts)
+    # Build alignment snapshot from checkpoint
+    alignment_snapshot = AlignmentSnapshot(
+        bam_path='',  # not available from checkpoint
+        run_info=dict(ts.run_info),
+        read_index=dict(ts.read_index),
+        feat_index=dict(ts.feat_index),
+        shape=ts.shape,
+        raw_scores=ts.raw_scores,
+        feature_lengths=dict(ts.feature_length),
+    )
 
-    ''' Run Expectation-Maximization '''
-    lg.info('Running Expectation-Maximization...')
-    stime = time()
-    if getattr(opts, 'parallel_blocks', False):
-        ts_model.em_parallel(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
-    else:
-        ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
-    lg.info("EM completed in %s" % fmtmins(time() - stime))
+    # Discover & run primers (assign only for resume)
+    registry = PluginRegistry()
+    registry.discover(active_primers=['assign'])
+    registry.configure_all(opts, get_ops())
 
-    ''' Output final report '''
-    lg.info("Generating Report...")
-    ts.output_report(ts_model, opts.outfile_path('run_stats.tsv'), opts.outfile_path('TE_counts.tsv'))
+    # Show loaded plugins
+    console.section('Primers')
+    for p in registry.primers:
+        console.plugin(p.name, p.description, p.version)
+    console.blank()
 
-    # if opts.updated_sam:
-    #     lg.info("Creating updated SAM file...")
-    #     ts.update_sam(ts_model, opts.outfile_path('updated.bam'))
+    if registry.cofactors:
+        console.section('Cofactors')
+        for c in registry.cofactors:
+            console.plugin(c.name, c.description)
+        console.blank()
 
+    registry.notify('on_matrix_built', alignment_snapshot)
+    registry.commit_all(opts.outdir, opts.exp_tag, console=console)
+
+    # Completion
+    console.blank()
+    console.status('Completed in {:.1f}s'.format(time() - total_time))
+    console.blank()
     lg.info("polymerase resume complete (%s)" % fmtmins(time() - total_time))
-
-    return

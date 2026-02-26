@@ -6,4 +6,8 @@
 # New code and modifications by Duane Storey (https://github.com/duanestorey) and Claude (Anthropic).
 # Licensed under MIT License.
 
-__version__ = "2.0.0"
+"""Plugin infrastructure for Polymerase primers and cofactors."""
+
+from .abc import Primer, Cofactor  # noqa: F401
+from .snapshots import AnnotationSnapshot, AlignmentSnapshot  # noqa: F401
+from .registry import PluginRegistry  # noqa: F401

@@ -4,8 +4,7 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  - python >=3.7
-  - future
+  - python >=3.10
   - pip
   - pyyaml
   - cython

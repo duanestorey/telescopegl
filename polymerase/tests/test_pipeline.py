@@ -332,7 +332,9 @@ class TestReportGeneration:
         with tempfile.TemporaryDirectory() as tmpdir:
             stats_file = os.path.join(tmpdir, 'stats.tsv')
             counts_file = os.path.join(tmpdir, 'counts.tsv')
-            output_report(ts, tl, stats_file, counts_file)
+            output_report(ts.feat_index, ts.feature_length, ts.run_info, tl,
+                          opts.reassign_mode, opts.conf_prob,
+                          stats_file, counts_file)
 
             assert os.path.exists(stats_file)
             assert os.path.exists(counts_file)
@@ -354,7 +356,9 @@ class TestReportGeneration:
         with tempfile.TemporaryDirectory() as tmpdir:
             stats_file = os.path.join(tmpdir, 'stats.tsv')
             counts_file = os.path.join(tmpdir, 'counts.tsv')
-            output_report(ts, tl, stats_file, counts_file)
+            output_report(ts.feat_index, ts.feature_length, ts.run_info, tl,
+                          opts.reassign_mode, opts.conf_prob,
+                          stats_file, counts_file)
 
             df = pd.read_csv(counts_file, sep='\t')
             assert 'transcript' in df.columns
@@ -612,7 +616,9 @@ class TestFullScale:
         with tempfile.TemporaryDirectory() as tmpdir:
             stats_f = os.path.join(tmpdir, 'stats.tsv')
             counts_f = os.path.join(tmpdir, 'counts.tsv')
-            output_report(ts, tl, stats_f, counts_f)
+            output_report(ts.feat_index, ts.feature_length, ts.run_info, tl,
+                          opts.reassign_mode, opts.conf_prob,
+                          stats_f, counts_f)
 
             df = pd.read_csv(counts_f, sep='\t')
             assert len(df) > 3000
@@ -653,7 +659,9 @@ class TestFullScale:
 
         stats_f = os.path.join(outdir, 'stats.tsv')
         counts_f = os.path.join(outdir, 'counts.tsv')
-        output_report(ts, tl, stats_f, counts_f)
+        output_report(ts.feat_index, ts.feature_length, ts.run_info, tl,
+                      opts.reassign_mode, opts.conf_prob,
+                      stats_f, counts_f)
 
         elapsed = time.perf_counter() - t0
         assert elapsed < 60, f"Full pipeline took {elapsed:.1f}s (expected <60s)"

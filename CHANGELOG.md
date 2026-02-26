@@ -45,9 +45,9 @@ All notable changes to this project will be documented in this file.
 - **1% test data** (`test_data/`): `SRR9666161_1pct_collated.bam` (30MB) and
   `retro.hg38.gtf` (18MB) checked into the repository for CI-friendly pipeline tests.
 
-- **170 tests** across 7 test files covering sparse ops, EM algorithm, block
-  decomposition, CPU-optimized equivalence, indexed path equivalence, and
-  full-scale pipeline benchmarking.
+- **211 tests** across 9 test files covering sparse ops, EM algorithm, block
+  decomposition, CPU-optimized equivalence, indexed path equivalence,
+  full-scale pipeline benchmarking, compute abstraction, and plugin framework.
 
 - `CHANGELOG.md` for documenting changes
 
@@ -55,8 +55,41 @@ All notable changes to this project will be documented in this file.
 
 - `CLAUDE.md` project context for Claude Code
 
-- Included [versioneer](https://github.com/python-versioneer/python-versioneer)
-  for managing version strings through git tags
+- **Plugin architecture** (`polymerase/plugins/`): Platform loads BAM/GTF once,
+  then delegates analysis to discoverable **primers** (analysis plugins) and
+  **cofactors** (post-processors). Plugins are discovered via Python
+  `entry_points` in `pyproject.toml`.
+
+- **`assign` primer** (`plugins/builtin/assign.py`): The original EM pipeline
+  refactored as the first built-in primer. Receives annotation and alignment
+  snapshots via platform hooks, runs EM, and writes counts/stats/updated SAM.
+
+- **`family-agg` cofactor** (`plugins/builtin/family_agg.py`): Aggregates
+  `assign` counts by `repFamily` and `repClass` from the GTF annotation.
+  Outputs `*-family_counts.tsv` and `*-class_counts.tsv`.
+
+- **`normalize` cofactor** (`plugins/builtin/normalize.py`): Computes TPM,
+  RPKM, and CPM from `assign` counts and feature lengths. Outputs
+  `*-normalized_counts.tsv`.
+
+- **Compute abstraction layer** (`polymerase/compute/`): Backend-agnostic math
+  operations (`ComputeOps` ABC) with `CpuOps` (scipy/numpy) and `GpuOps`
+  (CuPy/cuSPARSE) implementations. Primers use `ops.dot()`, `ops.norm()`, etc.
+  and get GPU acceleration automatically when available.
+
+- **Plugin management CLI**: `polymerase list-plugins` lists all installed
+  primers and cofactors. `polymerase install <package>` installs third-party
+  plugin packages.
+
+- **`pyproject.toml`**: Modern build configuration with entry_points for plugin
+  discovery. Replaces versioneer for version management.
+
+- **Frozen snapshot dataclasses** (`plugins/snapshots.py`): `AnnotationSnapshot`
+  and `AlignmentSnapshot` provide immutable data to primers via platform hooks.
+
+- **Plugin registry** (`plugins/registry.py`): Discovers, configures, notifies,
+  and commits all active primers and cofactors. Failing plugins log warnings
+  without crashing the pipeline.
 
 ### Changed
 
@@ -75,12 +108,31 @@ All notable changes to this project will be documented in this file.
   orchestrator + BAM loading), `likelihood.py` (EM algorithm), `reporter.py`
   (output I/O). Backward-compatible re-exports maintained.
 
+- **`run()` refactored into thin platform orchestrator** (`cli/assign.py`):
+  Loads data, builds frozen snapshots, and delegates to `PluginRegistry`.
+  All EM logic now lives inside the `assign` primer's `commit()` method.
+
+- **Reporter decoupled from Polymerase object** (`core/reporter.py`):
+  `output_report()` and `update_sam()` now accept individual data pieces
+  (feat_index, feature_length, run_info, etc.) instead of a Polymerase instance.
+
 - **Backend-aware sparse construction**: `likelihood.py` and `model.py` use
   `get_sparse_class()` from `backend.py` so the correct sparse class
   (`CpuOptimizedCsrMatrix` or `csr_matrix_plus`) is used throughout the pipeline.
 
-- Depends on python >= 3.7, ensure dict objects maintain insertion-order.
-  See [What's New In Python 3.7](https://docs.python.org/3/whatsnew/3.7.html)
+- **Backend detection extended for GPU**: `backend.py` now detects CuPy/cuSPARSE
+  availability with three-tier detection: GPU > CPU-Optimized > CPU Stock.
+
+- **Removed versioneer**: Replaced with static `__version__ = "2.0.0"` and
+  `pyproject.toml` metadata. Deleted `versioneer.py` (2205 lines) and
+  `polymerase/_version.py` (659 lines).
+
+- **Security fix**: Replaced `eval()` in CLI option type parsing with safe
+  lookup dictionary (`_SAFE_TYPES`).
+
+- **NumPy 2.0 compatibility**: Fixed `np.float` → `np.float64` in `matrix.py`.
+
+- Depends on python >= 3.10 (updated from 3.7).
 
 - Removed `bulk` and `sc` subcommands since the single-cell
   [stellarscope](https://github.com/nixonlab/stellarscope) project has moved
