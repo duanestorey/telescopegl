@@ -18,6 +18,7 @@ import gc
 import numpy as np
 
 from . import configure_logging
+from .console import Stopwatch
 from ..utils.helpers import format_minutes as fmtmins
 
 from ..core.model import Polymerase, scPolymerase
@@ -221,12 +222,15 @@ def run(args, sc=True):
     console.blank()
 
     # Load checkpoint
+    sw = Stopwatch()
     lg.info('Loading Polymerase object from file...')
+    sw.start('Checkpoint')
     stime = time()
     Polymerase_class = scPolymerase if sc else Polymerase
     ts = Polymerase_class.load(opts.checkpoint)
     ts.opts = opts
     _load_elapsed = time() - stime
+    sw.stop()
 
     ts.print_summary(lg.INFO)
 
@@ -269,7 +273,23 @@ def run(args, sc=True):
         console.blank()
 
     registry.notify('on_matrix_built', alignment_snapshot)
-    registry.commit_all(opts.outdir, opts.exp_tag, console=console)
+    os.makedirs(opts.outdir, exist_ok=True)
+    registry.commit_all(opts.outdir, opts.exp_tag, console=console,
+                        stopwatch=sw)
+
+    # Output file summary
+    from .assign import _collect_output_files
+    _output_files = _collect_output_files(opts.outdir)
+    if _output_files:
+        console.blank()
+        console.section('Output ({} files in {})'.format(
+            len(_output_files), opts.outdir + '/'))
+        for f in _output_files:
+            console.output_file(f)
+
+    # Timing summary
+    console.blank()
+    console.timing_table(sw)
 
     # Completion
     console.blank()

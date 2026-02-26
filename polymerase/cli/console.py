@@ -14,6 +14,42 @@ handle debug/diagnostic output on stderr.
 """
 
 import sys
+from time import perf_counter
+
+
+class Stopwatch:
+    """Collects named timing segments for a benchmark summary."""
+
+    def __init__(self):
+        self._timings = []        # [(name, elapsed, level)]
+        self._start = None
+        self._active = None
+
+    def start(self, name, level=0):
+        """Begin timing a named stage. level=0 top-level, 1 sub-stage."""
+        now = perf_counter()
+        if self._active:
+            self._timings.append(
+                (self._active[0], now - self._active[1], self._active[2]))
+        self._active = (name, now, level)
+        if self._start is None:
+            self._start = now
+
+    def stop(self):
+        """Stop the current segment."""
+        if self._active:
+            now = perf_counter()
+            self._timings.append(
+                (self._active[0], now - self._active[1], self._active[2]))
+            self._active = None
+
+    @property
+    def total(self):
+        return perf_counter() - self._start if self._start else 0.0
+
+    @property
+    def timings(self):
+        return list(self._timings)
 
 
 class Console:
@@ -94,6 +130,38 @@ class Console:
         if self.level < self.NORMAL:
             return
         self._write('')
+
+    def timing_table(self, stopwatch):
+        """Print timing summary table."""
+        if self.level < self.NORMAL:
+            return
+        timings = stopwatch.timings
+        total = stopwatch.total
+        if not timings:
+            return
+
+        self.section('Timing')
+        for name, elapsed, level in timings:
+            if level > 0 and self.level < self.VERBOSE:
+                continue
+            indent = '      ' if level > 0 else '    '
+            if level == 0 and total > 0:
+                pct = '{:>4.0f}%'.format(elapsed / total * 100)
+            else:
+                pct = ''
+            self._write('{}{:<18}{:>5.1f}s{:>8}'.format(
+                indent, name, elapsed, pct))
+
+        # Overhead = total - sum of top-level stages
+        top_sum = sum(e for _, e, l in timings if l == 0)
+        overhead = total - top_sum
+        if overhead > 0.01:
+            pct = '{:>4.0f}%'.format(overhead / total * 100)
+            self._write('    {:<18}{:>5.1f}s{:>8}'.format(
+                'Overhead', overhead, pct))
+
+        self._write('    ' + '\u2500' * 30)
+        self._write('    {:<18}{:>5.1f}s'.format('Total', total))
 
     def _write(self, text):
         print(text, file=self.stream)

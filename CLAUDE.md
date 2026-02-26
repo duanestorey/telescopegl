@@ -28,6 +28,7 @@ Two BAM loading paths:
 | `polymerase/sparse/matrix.py` | `csr_matrix_plus` -- extends scipy CSR with `norm`, `scale`, `binmax`, `choose_random`, `apply_func`, `count`, `threshold_filter`, `indicator` |
 | `polymerase/cli/assign.py` | `assign` subcommand: CLI options (`BulkIDOptions`, `scIDOptions`), `run()` thin platform orchestrator (loads data, builds snapshots, delegates to registry) |
 | `polymerase/cli/resume.py` | `resume` subcommand: loads checkpoint, builds snapshot, delegates to registry |
+| `polymerase/cli/console.py` | `Console` (pretty stdout output), `Stopwatch` (named timing collector), `timing_table()` benchmark display |
 | `polymerase/cli/plugins.py` | `list-plugins` and `install` subcommands for plugin management |
 | `polymerase/__main__.py` | Entry point, argparse subcommand routing (`assign`, `resume`, `test`, `list-plugins`, `install`) |
 | `polymerase/cli/__init__.py` | `SubcommandOptions` base class (YAML-based CLI), `configure_logging()`, `BIG_INT`, `_SAFE_TYPES` |

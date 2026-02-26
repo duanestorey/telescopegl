@@ -21,6 +21,7 @@ import shutil
 import numpy as np
 
 from . import SubcommandOptions, configure_logging
+from .console import Stopwatch
 from ..utils.helpers import format_minutes as fmtmins
 from ..core.model import Polymerase, scPolymerase
 
@@ -407,6 +408,18 @@ def _parse_primers_arg(opts):
     return [p.strip() for p in raw.split(',') if p.strip()]
 
 
+def _collect_output_files(outdir):
+    """Collect output files relative to outdir, sorted with top-level first."""
+    results = []
+    for root, _dirs, files in os.walk(outdir):
+        for f in sorted(files):
+            relpath = os.path.relpath(os.path.join(root, f), outdir)
+            results.append(relpath)
+    # Sort: top-level files first, then subdirectory files
+    results.sort(key=lambda p: (os.sep in p, p))
+    return results
+
+
 def _backend_display_name(be):
     """Human-readable backend name for console output."""
     names = {
@@ -454,22 +467,27 @@ def run(args, sc=True):
     console.blank()
 
     # --- Platform: Load Data ---
+    sw = Stopwatch()
     ts = scPolymerase(opts) if sc else Polymerase(opts)
 
     Annotation = get_annotation_class(opts.annotation_class)
     lg.info('Loading annotation...')
+    sw.start('Annotation')
     stime = time()
     annot = Annotation(opts.gtffile, opts.attribute, opts.stranded_mode)
     _annot_elapsed = time() - stime
+    sw.stop()
     lg.info("Loaded annotation in {}".format(fmtmins(_annot_elapsed)))
     lg.info('Loaded {} features.'.format(len(annot.loci)))
     console.verbose('Loaded annotation: {:,} features ({:.1f}s)'.format(
         len(annot.loci), _annot_elapsed))
 
     lg.info('Loading alignments...')
+    sw.start('Alignment')
     stime = time()
     ts.load_alignment(annot)
     _aln_elapsed = time() - stime
+    sw.stop()
     lg.info("Loaded alignment in {}".format(fmtmins(_aln_elapsed)))
 
     ts.print_summary(lg.INFO)
@@ -502,6 +520,7 @@ def run(args, sc=True):
     annot = None  # free memory
     lg.debug('garbage: {:d}'.format(gc.collect()))
 
+    os.makedirs(opts.outdir, exist_ok=True)
     ts.save(opts.outfile_path('checkpoint'))
 
     alignment_snapshot = AlignmentSnapshot(
@@ -537,7 +556,21 @@ def run(args, sc=True):
 
     registry.notify('on_annotation_loaded', annot_snapshot)
     registry.notify('on_matrix_built', alignment_snapshot)
-    registry.commit_all(opts.outdir, opts.exp_tag, console=console)
+    registry.commit_all(opts.outdir, opts.exp_tag, console=console,
+                        stopwatch=sw)
+
+    # Output file summary
+    _output_files = _collect_output_files(opts.outdir)
+    if _output_files:
+        console.blank()
+        console.section('Output ({} files in {})'.format(
+            len(_output_files), opts.outdir + '/'))
+        for f in _output_files:
+            console.output_file(f)
+
+    # Timing summary
+    console.blank()
+    console.timing_table(sw)
 
     # Completion
     console.blank()

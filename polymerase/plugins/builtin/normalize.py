@@ -38,7 +38,8 @@ class NormalizeCofactor(Cofactor):
     def configure(self, opts, compute) -> None:
         self._compute = compute
 
-    def transform(self, primer_output_dir, output_dir, exp_tag, console=None) -> None:
+    def transform(self, primer_output_dir, output_dir, exp_tag, console=None,
+                  stopwatch=None) -> None:
         counts_file = os.path.join(primer_output_dir, '%s-TE_counts.tsv' % exp_tag)
         stats_file = os.path.join(primer_output_dir, '%s-run_stats.tsv' % exp_tag)
 
@@ -132,7 +133,11 @@ class NormalizeCofactor(Cofactor):
         for col in ['CPM', 'RPKM', 'TPM']:
             df[col] = df[col].round(4)
 
-        out_file = os.path.join(output_dir, '%s-normalized_counts.tsv' % exp_tag)
+        out_name = '%s-normalized_counts.tsv' % exp_tag
+        out_file = os.path.join(output_dir, out_name)
         df[['transcript', 'count', 'transcript_length', 'CPM', 'RPKM', 'TPM']].to_csv(
             out_file, sep='\t', index=False)
         lg.info("normalize: wrote {}".format(out_file))
+
+        if console:
+            console.detail('normalize \u2192 {}'.format(out_name))
