@@ -54,7 +54,7 @@ class Primer(ABC):
     # -- Output --------------------------------------------------------------
 
     @abstractmethod
-    def commit(self, output_dir: str, exp_tag: str) -> None:
+    def commit(self, output_dir: str, exp_tag: str, console=None) -> None:
         """Write results to *output_dir*."""
 
 
@@ -83,5 +83,5 @@ class Cofactor(ABC):
 
     @abstractmethod
     def transform(self, primer_output_dir: str, output_dir: str,
-                  exp_tag: str) -> None:
+                  exp_tag: str, console=None) -> None:
         """Read the primer's output, write transformed results."""

@@ -49,7 +49,7 @@ class AssignPrimer(Primer):
     def on_matrix_built(self, snapshot) -> None:
         self._alignment = snapshot
 
-    def commit(self, output_dir, exp_tag) -> None:
+    def commit(self, output_dir, exp_tag, console=None) -> None:
         from ...core.likelihood import PolymeraseLikelihood
         from ...core.reporter import output_report, update_sam
 
@@ -61,6 +61,8 @@ class AssignPrimer(Primer):
 
         if getattr(opts, 'skip_em', False):
             lg.info("Skipping EM...")
+            if console:
+                console.detail('Skipping EM (--skip_em)')
             return
 
         # Seed RNG (identical to original pipeline)
@@ -80,10 +82,19 @@ class AssignPrimer(Primer):
             ts_model.em_parallel(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
         else:
             ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
-        lg.info("EM completed in %s" % fmtmins(time() - stime))
+        _em_elapsed = time() - stime
+        lg.info("EM completed in %s" % fmtmins(_em_elapsed))
+
+        if console:
+            _con = 'converged' if ts_model.num_iterations < opts.max_iter else 'terminated'
+            console.detail('EM {} after {} iterations ({:.2f}s)'.format(
+                _con, ts_model.num_iterations, _em_elapsed))
+            console.detail('Final log-likelihood: {:,.2f}'.format(ts_model.lnl))
 
         # Generate report
         lg.info("Generating Report...")
+        if console:
+            console.detail('Generating report... done')
         stats_file = os.path.join(output_dir, '%s-run_stats.tsv' % exp_tag)
         counts_file = os.path.join(output_dir, '%s-TE_counts.tsv' % exp_tag)
 

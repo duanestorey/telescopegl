@@ -124,28 +124,33 @@ class PluginRegistry:
 
     # -- Commit & transform --------------------------------------------------
 
-    def commit_all(self, output_dir, exp_tag):
+    def commit_all(self, output_dir, exp_tag, console=None):
         """Call commit() on every primer, then run each primer's cofactors."""
         import os
 
         for p in self._primers:
             primer_dir = output_dir  # default primer writes to top-level
+            if console:
+                console.section('Running {}...'.format(p.name))
             try:
                 lg.info("Committing primer: {}".format(p.name))
-                p.commit(primer_dir, exp_tag)
+                p.commit(primer_dir, exp_tag, console=console)
             except Exception as exc:
                 lg.warning("Primer '{}' commit failed: {}".format(p.name, exc))
                 continue
 
             # Run cofactors for this primer
-            for c in self._cofactors:
-                if c.primer_name != p.name:
-                    continue
+            _primer_cofactors = [c for c in self._cofactors
+                                 if c.primer_name == p.name]
+            if _primer_cofactors and console:
+                console.blank()
+                console.section('Running cofactors...')
+            for c in _primer_cofactors:
                 cofactor_dir = os.path.join(output_dir, c.name)
                 os.makedirs(cofactor_dir, exist_ok=True)
                 try:
                     lg.info("Running cofactor: {} (for {})".format(c.name, p.name))
-                    c.transform(primer_dir, cofactor_dir, exp_tag)
+                    c.transform(primer_dir, cofactor_dir, exp_tag, console=console)
                 except Exception as exc:
                     lg.warning("Cofactor '{}' transform failed: {}".format(
                         c.name, exc))

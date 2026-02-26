@@ -147,12 +147,24 @@ class Polymerase(object):
         with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
                                  threads=_threads) as sf:
             self.has_index = sf.has_index()
-            if self.has_index:
-                self.run_info['nmap_idx'] = sf.mapped
-                self.run_info['nunmap_idx'] = sf.unmapped
-
+            _is_coordinate_sorted = (
+                sf.header.get('HD', {}).get('SO') == 'coordinate'
+            )
             self.ref_names = sf.references
             self.ref_lengths = sf.lengths
+
+        # Auto-create .bai index for coordinate-sorted BAMs without one
+        if not self.has_index and _is_coordinate_sorted:
+            lg.info('Coordinate-sorted BAM without index — creating .bai')
+            pysam.index(self.opts.samfile)
+            self.has_index = True
+
+        # Read mapped/unmapped counts from index
+        if self.has_index:
+            with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
+                                     threads=_threads) as sf:
+                self.run_info['nmap_idx'] = sf.mapped
+                self.run_info['nunmap_idx'] = sf.unmapped
 
         return
 

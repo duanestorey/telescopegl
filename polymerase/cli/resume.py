@@ -34,6 +34,9 @@ class BulkResumeOptions(IDOptions):
         - quiet:
             action: store_true
             help: Silence (most) output.
+        - verbose:
+            action: store_true
+            help: Show detailed progress including EM iterations and timing.
         - debug:
             action: store_true
             help: Print debug messages.
@@ -116,6 +119,9 @@ class scResumeOptions(IDOptions):
         - quiet:
             action: store_true
             help: Silence (most) output.
+        - verbose:
+            action: store_true
+            help: Show detailed progress including EM iterations and timing.
         - debug:
             action: store_true
             help: Print debug messages.
@@ -200,18 +206,39 @@ def run(args, sc=True):
 
     option_class = scResumeOptions if sc else BulkResumeOptions
     opts = option_class(args, sc=sc)
-    configure_logging(opts)
+    console = configure_logging(opts)
     backend.configure()
     lg.info('\n{}\n'.format(opts))
     total_time = time()
 
+    # Banner
+    console.banner(opts.version)
+
+    console.section('Input')
+    console.item('Checkpoint', os.path.basename(opts.checkpoint))
+    from .assign import _backend_display_name
+    console.item('Backend', _backend_display_name(backend.get_backend()))
+    console.blank()
+
     # Load checkpoint
     lg.info('Loading Polymerase object from file...')
+    stime = time()
     Polymerase_class = scPolymerase if sc else Polymerase
     ts = Polymerase_class.load(opts.checkpoint)
     ts.opts = opts
+    _load_elapsed = time() - stime
 
     ts.print_summary(lg.INFO)
+
+    _ri = ts.run_info
+    _unique = int(_ri.get('overlap_unique', 0))
+    _ambig = int(_ri.get('overlap_ambig', 0))
+    _overlap = _unique + _ambig
+
+    console.status('Loaded checkpoint ({:.1f}s)'.format(_load_elapsed))
+    console.detail('{:,} overlap annotation ({:,} unique, {:,} ambiguous)'.format(
+        _overlap, _unique, _ambig))
+    console.blank()
 
     # Build alignment snapshot from checkpoint
     alignment_snapshot = AlignmentSnapshot(
@@ -229,7 +256,23 @@ def run(args, sc=True):
     registry.discover(active_primers=['assign'])
     registry.configure_all(opts, get_ops())
 
-    registry.notify('on_matrix_built', alignment_snapshot)
-    registry.commit_all(opts.outdir, opts.exp_tag)
+    # Show loaded plugins
+    console.section('Primers')
+    for p in registry.primers:
+        console.plugin(p.name, p.description, p.version)
+    console.blank()
 
+    if registry.cofactors:
+        console.section('Cofactors')
+        for c in registry.cofactors:
+            console.plugin(c.name, c.description)
+        console.blank()
+
+    registry.notify('on_matrix_built', alignment_snapshot)
+    registry.commit_all(opts.outdir, opts.exp_tag, console=console)
+
+    # Completion
+    console.blank()
+    console.status('Completed in {:.1f}s'.format(time() - total_time))
+    console.blank()
     lg.info("polymerase resume complete (%s)" % fmtmins(time() - total_time))
