@@ -15,6 +15,7 @@ from .utils.helpers import format_minutes as fmtmins
 
 from .utils.model import Telescope, scTelescope, TelescopeLikelihood
 from .telescope_assign import IDOptions
+from .utils import backend
 
 __author__ = 'Matthew L. Bendall'
 __copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
@@ -94,6 +95,10 @@ class BulkResumeOptions(IDOptions):
         - use_likelihood:
             action: store_true
             help: Use difference in log-likelihood as convergence criteria.
+    - Performance Options:
+        - parallel_blocks:
+            action: store_true
+            help: Decompose into independent blocks and solve in parallel.
     """
 
 class scResumeOptions(IDOptions):
@@ -172,6 +177,10 @@ class scResumeOptions(IDOptions):
         - use_likelihood:
             action: store_true
             help: Use difference in log-likelihood as convergence criteria.
+    - Performance Options:
+        - parallel_blocks:
+            action: store_true
+            help: Decompose into independent blocks and solve in parallel.
     """
 
 def run(args, sc = True):
@@ -186,6 +195,7 @@ def run(args, sc = True):
     option_class = scResumeOptions if sc == True else BulkResumeOptions
     opts = option_class(args, sc = sc)
     utils.configure_logging(opts)
+    backend.configure()
     lg.info('\n{}\n'.format(opts))
     total_time = time()
 
@@ -210,7 +220,10 @@ def run(args, sc = True):
     ''' Run Expectation-Maximization '''
     lg.info('Running Expectation-Maximization...')
     stime = time()
-    ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
+    if getattr(opts, 'parallel_blocks', False):
+        ts_model.em_parallel(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
+    else:
+        ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
     lg.info("EM completed in %s" % fmtmins(time() - stime))
 
     ''' Output final report '''

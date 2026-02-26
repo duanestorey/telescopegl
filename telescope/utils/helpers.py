@@ -145,6 +145,41 @@ def grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return zip_longest(*args, fillvalue=fillvalue)
 
+def merge_overlapping_regions(regions, padding=0):
+    """Merge overlapping genomic regions.
+
+    Args:
+        regions: List of (chrom, start, end) tuples.
+        padding: bp to add around each region before merging.
+
+    Returns:
+        List of merged (chrom, start, end) tuples.
+    """
+    if not regions:
+        return []
+
+    # Group by chromosome
+    by_chrom = {}
+    for chrom, start, end in regions:
+        by_chrom.setdefault(chrom, []).append(
+            (max(0, start - padding), end + padding)
+        )
+
+    merged = []
+    for chrom in sorted(by_chrom):
+        intervals = sorted(by_chrom[chrom])
+        current_start, current_end = intervals[0]
+        for start, end in intervals[1:]:
+            if start <= current_end:
+                current_end = max(current_end, end)
+            else:
+                merged.append((chrom, current_start, current_end))
+                current_start, current_end = start, end
+        merged.append((chrom, current_start, current_end))
+
+    return merged
+
+
 def str2int(s):
     try:
         return int(s)

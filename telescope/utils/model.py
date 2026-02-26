@@ -18,8 +18,9 @@ import scipy
 import pysam
 
 from .sparse_plus import csr_matrix_plus as csr_matrix
+from .backend import get_sparse_class
 from .colors import c2str, D2PAL, GPAL
-from .helpers import str2int, region_iter, phred
+from .helpers import str2int, region_iter, phred, merge_overlapping_regions
 
 from . import alignment
 from . import BIG_INT
@@ -69,6 +70,48 @@ def process_overlap_frag(pairs, overlap_feats):
     return _maps
 
 
+def _resolve_duplicates_max(rows, cols, data, shape):
+    """Build CSR matrix from COO arrays, resolving duplicate (i,j) by max.
+
+    Args:
+        rows, cols, data: COO-format arrays.
+        shape: (n_rows, n_cols) tuple.
+
+    Returns:
+        scipy.sparse.csr_matrix with max value for each (i,j).
+    """
+    rows = np.array(rows, dtype=np.intp)
+    cols = np.array(cols, dtype=np.intp)
+    data = np.array(data, dtype=np.uint16)
+
+    if len(rows) == 0:
+        return scipy.sparse.csr_matrix(shape, dtype=np.uint16)
+
+    # Sort by (row, col) for grouping
+    order = np.lexsort((cols, rows))
+    rows = rows[order]
+    cols = cols[order]
+    data = data[order]
+
+    # Find group boundaries: where (row, col) changes
+    diff = np.diff(rows).astype(bool) | np.diff(cols).astype(bool)
+    boundaries = np.concatenate(([0], np.where(diff)[0] + 1))
+
+    # Take max within each group
+    out_rows = rows[boundaries]
+    out_cols = cols[boundaries]
+    out_data = np.empty(len(boundaries), dtype=np.uint16)
+
+    for idx in range(len(boundaries)):
+        start = boundaries[idx]
+        end = boundaries[idx + 1] if idx + 1 < len(boundaries) else len(data)
+        out_data[idx] = data[start:end].max()
+
+    return scipy.sparse.csr_matrix(
+        (out_data, (out_rows, out_cols)), shape=shape, dtype=np.uint16
+    )
+
+
 def _print_progress(nfrags, infolev=2500000):
     mfrags = nfrags / 1e6
     msg = '...processed {:.1f}M fragments'.format(mfrags)
@@ -99,7 +142,9 @@ class Telescope(object):
         # Set the version
         self.run_info['version'] = self.opts.version
 
-        with pysam.AlignmentFile(self.opts.samfile, check_sq=False) as sf:
+        _threads = getattr(self.opts, 'ncpu', 1)
+        with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
+                                 threads=_threads) as sf:
             self.has_index = sf.has_index()
             if self.has_index:
                 self.run_info['nmap_idx'] = sf.mapped
@@ -144,7 +189,8 @@ class Telescope(object):
         obj.shape = len(obj.read_index), len(obj.feat_index)
         assert tuple(loader['_shape']) == obj.shape
 
-        obj.raw_scores = csr_matrix((
+        _sparse_cls = get_sparse_class()
+        obj.raw_scores = _sparse_cls((
             loader['_raw_scores_data'],
             loader['_raw_scores_indices'],
             loader['_raw_scores_indptr'] ),
@@ -156,6 +202,104 @@ class Telescope(object):
         ret = self.run_info['total_fragments'] % self.shape[0] * self.shape[1]
         # 2**32 - 1 = 4294967295
         return ret % 4294967295
+
+    @staticmethod
+    def _get_te_regions(annotation, padding=500):
+        """Extract TE locus coordinates with padding, merge overlapping.
+
+        Args:
+            annotation: Annotation object with loci dict.
+            padding: bp to add around each region.
+
+        Returns:
+            List of merged (chrom, start, end) tuples.
+        """
+        regions = []
+        for locus_name, locus_data in annotation.loci.items():
+            if hasattr(locus_data, 'chrom'):
+                regions.append((locus_data.chrom, locus_data.start, locus_data.end))
+            elif hasattr(annotation, 'itree'):
+                for chrom, tree in annotation.itree.items():
+                    for iv in tree:
+                        if hasattr(iv, 'data') and iv.data == locus_name:
+                            regions.append((chrom, iv.begin, iv.end))
+        if not regions:
+            return []
+        return merge_overlapping_regions(regions, padding=padding)
+
+    def _load_prefiltered(self, annotation):
+        """Load alignments using index-based region pre-filtering.
+
+        Only fetches reads from genomic regions overlapping TE loci,
+        avoiding full BAM scan.
+        """
+        _update_sam = self.opts.updated_sam
+        _nfkey = self.opts.no_feature_key
+        _omode, _othresh = self.opts.overlap_mode, self.opts.overlap_threshold
+
+        _mappings = []
+        assign = Assigner(annotation, _nfkey, _omode, _othresh,
+                          self.opts.stranded_mode).assign_func()
+
+        alninfo = Counter()
+        te_regions = self._get_te_regions(annotation)
+        lg.info('Pre-filtering: {} merged TE regions'.format(len(te_regions)))
+
+        # Get total fragment count from BAI index
+        _threads = getattr(self.opts, 'ncpu', 1)
+        with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
+                                 threads=_threads) as sf:
+            alninfo['total_fragments'] = (sf.mapped + sf.unmapped) // 2
+
+            _minAS, _maxAS = BIG_INT, -BIG_INT
+            seen_reads = set()
+
+            for chrom, start, end in te_regions:
+                try:
+                    for ci, alns in alignment.fetch_fragments_seq(
+                            sf, region=(chrom, start, end)):
+                        # Deduplicate across regions
+                        qid = alns[0].query_id
+                        if qid in seen_reads:
+                            continue
+                        seen_reads.add(qid)
+
+                        _code = alignment.CODES[ci][0]
+                        alninfo[_code] += 1
+
+                        if _code == 'SU' or _code == 'PU':
+                            continue
+
+                        _mapped = [a for a in alns if not a.is_unmapped]
+                        _scores = [a.alnscore for a in _mapped]
+                        _minAS = min(_minAS, *_scores)
+                        _maxAS = max(_maxAS, *_scores)
+
+                        overlap_feats = list(map(assign, _mapped))
+                        has_overlap = any(f != _nfkey for f in overlap_feats)
+
+                        if not has_overlap:
+                            continue
+
+                        _ambig = len(_mapped) > 1
+                        alninfo['feat_{}'.format('A' if _ambig else 'U')] += 1
+
+                        for m in process_overlap_frag(_mapped, overlap_feats):
+                            _mappings.append((ci, m[0], m[1], m[2], m[3]))
+                except ValueError:
+                    # Region not in BAM (e.g. unmatched contig)
+                    continue
+
+        # Handle unmapped count
+        mapped_count = sum(alninfo.get(c, 0) for c in ['SM', 'PM', 'PX'])
+        alninfo['unmapped'] = alninfo['total_fragments'] - mapped_count
+        alninfo['unique'] = alninfo.get('feat_U', 0)
+        alninfo['ambig'] = alninfo.get('feat_A', 0)
+
+        if _maxAS < _minAS:
+            _minAS, _maxAS = 0, 0
+
+        return _mappings, (_minAS, _maxAS), alninfo
 
     def load_alignment(self, annotation):
         self.run_info['annotated_features'] = len(annotation.loci)
@@ -227,7 +371,8 @@ class Telescope(object):
 
         """ Load unsorted reads """
         alninfo = Counter()
-        with pysam.AlignmentFile(self.opts.samfile, check_sq=False) as sf:
+        with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
+                                 threads=getattr(self.opts, 'ncpu', 1)) as sf:
             # Create output temporary files
             if _update_sam:
                 bam_u = pysam.AlignmentFile(self.other_bam, 'wb', template=sf)
@@ -298,11 +443,11 @@ class Telescope(object):
         # Scores should be greater than zero
         rescale = {s: (s - minAS + 1) for s in range(minAS, maxAS + 1)}
 
-        # Construct dok matrix with mappings
-        dim = (1000000000, 10000000)
-
+        # Collect COO entries (sequential for index-building)
         rcodes = defaultdict(Counter)
-        _m1 = scipy.sparse.dok_matrix(dim, dtype=np.uint16)
+        _rows = []
+        _cols = []
+        _data = []
         _ridx = self.read_index
         _fidx = self.feat_index
         _fidx[self.opts.no_feature_key] = 0
@@ -310,8 +455,15 @@ class Telescope(object):
         for code, rid, fid, ascr, alen in miter:
             i = _ridx.setdefault(rid, len(_ridx))
             j = _fidx.setdefault(fid, len(_fidx))
-            _m1[i, j] = max(_m1[i, j], (rescale[ascr] + alen))
+            _rows.append(i)
+            _cols.append(j)
+            _data.append(rescale[ascr] + alen)
             if _isparallel: rcodes[code][i] += 1
+
+        # Build CSR matrix, resolving duplicate (i,j) by max
+        _m1 = _resolve_duplicates_max(
+            _rows, _cols, _data, (len(_ridx), len(_fidx))
+        )
 
         ''' Map barcodes to read indices '''
         if self.single_cell == True:
@@ -347,16 +499,14 @@ class Telescope(object):
                 alninfo[desc] = alninfo[cs]
                 del alninfo[cs]
 
-        """ Trim extra rows and columns from matrix """
-        _m1 = _m1[:len(_ridx), :len(_fidx)]
-
         """ Remove rows with only __nofeature """
         rownames = np.array(sorted(_ridx, key=_ridx.get))
         assert _fidx[self.opts.no_feature_key] == 0, "No feature key is not first column!"
         # Remove nofeature column then find rows with nonzero values
         _nz = scipy.sparse.csc_matrix(_m1)[:,1:].sum(1).nonzero()[0]
         # Subset scores and read names
-        self.raw_scores = csr_matrix(csr_matrix(_m1)[_nz, ])
+        _sparse_cls = get_sparse_class()
+        self.raw_scores = _sparse_cls(_sparse_cls(_m1)[_nz, ])
         _ridx = {v:i for i,v in enumerate(rownames[_nz])}
         # Set the shape
         self.shape = (len(_ridx), len(_fidx))

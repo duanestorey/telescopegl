@@ -197,7 +197,7 @@ def fetch_region(samfile, annotation, opts, region):
     mfile = os.path.join(_tempdir, 'tmp_map.{}.{}.{}.txt'.format(*region))
 
     fh = open(mfile, 'w')
-    with pysam.AlignmentFile(samfile) as sf:
+    with pysam.AlignmentFile(samfile, threads=2) as sf:
         samiter = sf.fetch(*region, multiple_iterators=True)
         regtup = (sf.get_tid(region[0]), region[1], region[2])
         for ci, aln in fetch_pairs_sorted(samiter, regtup):

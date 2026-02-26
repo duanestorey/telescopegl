@@ -4,11 +4,14 @@
 Extracted from model.py to separate I/O concerns from core algorithm.
 """
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
 import pandas as pd
 import pysam
 
 from .sparse_plus import csr_matrix_plus as csr_matrix
+from .backend import get_backend
 from .colors import c2str, D2PAL, GPAL
 from .helpers import phred
 from . import alignment
@@ -35,16 +38,38 @@ def output_report(telescope_obj, tl, stats_filename, counts_filename):
         index=['final_conf', 'final_prop', 'init_best_avg', 'init_prop']
     )
 
+    # Define reassignment tasks: (key, method, thresh, initial)
+    _tasks = [
+        ('final_conf',       'conf',    _rprob, False),
+        ('init_aligned',     'all',     0.9,    True),
+        ('unique_count',     'unique',  0.9,    False),
+        ('init_best',        'exclude', 0.9,    True),
+        ('init_best_random', 'choose',  0.9,    True),
+        ('init_best_avg',    'average', 0.9,    True),
+    ]
+
+    def _do_reassign(task):
+        key, method, thresh, initial = task
+        # Each thread needs its own RNG state for 'choose' mode
+        return key, tl.reassign(method, thresh, initial).sum(0).A1
+
+    backend = get_backend()
+    if backend.name == 'cpu_optimized':
+        with ThreadPoolExecutor(max_workers=len(_tasks)) as pool:
+            reassign_results = dict(pool.map(_do_reassign, _tasks))
+    else:
+        reassign_results = dict(map(_do_reassign, _tasks))
+
     _stats_report0 = {
         'transcript': _fnames,
         'transcript_length': [_flens[f] for f in _fnames],
-        'final_conf': tl.reassign('conf', _rprob).sum(0).A1,
+        'final_conf': reassign_results['final_conf'],
         'final_prop': tl.pi,
-        'init_aligned': tl.reassign('all', initial=True).sum(0).A1,
-        'unique_count': tl.reassign('unique').sum(0).A1,
-        'init_best': tl.reassign('exclude', initial=True).sum(0).A1,
-        'init_best_random': tl.reassign('choose', initial=True).sum(0).A1,
-        'init_best_avg': tl.reassign('average', initial=True).sum(0).A1,
+        'init_aligned': reassign_results['init_aligned'],
+        'unique_count': reassign_results['unique_count'],
+        'init_best': reassign_results['init_best'],
+        'init_best_random': reassign_results['init_best_random'],
+        'init_best_avg': reassign_results['init_best_avg'],
         'init_prop': tl.pi_init,
     }
 
@@ -84,7 +109,9 @@ def update_sam(telescope_obj, tl, filename):
 
     mat = csr_matrix(tl.reassign(_rmethod, _rprob))
 
-    with pysam.AlignmentFile(telescope_obj.tmp_bam, check_sq=False) as sf:
+    _threads = getattr(telescope_obj.opts, 'ncpu', 1)
+    with pysam.AlignmentFile(telescope_obj.tmp_bam, check_sq=False,
+                             threads=_threads) as sf:
         header = sf.header
         header['PG'].append({
             'PN': 'telescope', 'ID': 'telescope',

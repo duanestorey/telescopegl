@@ -62,6 +62,10 @@ setup(
         'intervaltree>=3.0.2',
     ],
 
+    extras_require={
+        'optimized': ['sparse-dot-mkl', 'numba', 'threadpoolctl'],
+    },
+
     # Runnable scripts
     entry_points={
         'console_scripts': [

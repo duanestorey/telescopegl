@@ -10,6 +10,7 @@ from time import perf_counter
 import numpy as np
 
 from .sparse_plus import csr_matrix_plus as csr_matrix
+from .backend import get_sparse_class
 
 __author__ = 'Matthew L. Bendall'
 __copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
@@ -26,6 +27,9 @@ class TelescopeLikelihood(object):
     """
 
     def __init__(self, score_matrix, opts):
+        # Backend-aware sparse class
+        self._csr_class = get_sparse_class()
+
         # Raw scores
         self.raw_scores = score_matrix
         self.max_score = self.raw_scores.max()
@@ -86,9 +90,9 @@ class TelescopeLikelihood(object):
         E(z[i,j]) = ( pi[j] * theta[j]**Y[i] * Q[i,j] ) / sum_k(...)
         """
         lg.debug('started e-step')
-        _amb = csr_matrix(self.Q.multiply(self.Y)).multiply(pi * theta)
-        _uni = csr_matrix(self.Q.multiply(1 - self.Y)).multiply(pi)
-        _n = csr_matrix(_amb + _uni)
+        _amb = self._csr_class(self.Q.multiply(self.Y)).multiply(pi * theta)
+        _uni = self._csr_class(self.Q.multiply(1 - self.Y)).multiply(pi)
+        _n = self._csr_class(_amb + _uni)
         return _n.norm(1)
 
     def mstep(self, z):
@@ -111,9 +115,9 @@ class TelescopeLikelihood(object):
     def calculate_lnl(self, z, pi, theta):
         """Calculate log-likelihood."""
         lg.debug('started lnl')
-        _amb = csr_matrix(self.Q.multiply(self.Y)).multiply(pi * theta)
-        _uni = csr_matrix(self.Q.multiply(1 - self.Y)).multiply(pi)
-        _inner = csr_matrix(_amb + _uni)
+        _amb = self._csr_class(self.Q.multiply(self.Y)).multiply(pi * theta)
+        _uni = self._csr_class(self.Q.multiply(1 - self.Y)).multiply(pi)
+        _inner = self._csr_class(_amb + _uni)
         cur = z.multiply(_inner.log1p()).sum()
         lg.debug('completed lnl')
         return cur
@@ -186,12 +190,98 @@ class TelescopeLikelihood(object):
             v = _z.binmax(1)
             assignments = v.norm(1)
         elif method == 'conf':
-            v = _z.apply_func(lambda x: x if x >= thresh else 0)
+            v = _z.threshold_filter(thresh)
             assignments = v.norm(1)
         elif method == 'unique':
             assignments = _z.multiply(1 - self.Y).ceil().astype(np.uint8)
         elif method == 'all':
-            assignments = _z.apply_func(lambda x: 1 if x > 0 else 0).astype(np.uint8)
+            assignments = _z.indicator().astype(np.uint8)
 
-        assignments = csr_matrix(assignments)
+        assignments = self._csr_class(assignments)
         return assignments
+
+    @classmethod
+    def _from_block(cls, sub_matrix, parent):
+        """Create a sub-TelescopeLikelihood from a block of the parent's matrix.
+
+        Args:
+            sub_matrix: Sub-block sparse score matrix.
+            parent: Parent TelescopeLikelihood instance (for opts).
+
+        Returns:
+            New TelescopeLikelihood instance for the sub-block.
+        """
+        class _BlockOpts:
+            pass
+        opts = _BlockOpts()
+        opts.em_epsilon = parent.epsilon
+        opts.max_iter = parent.max_iter
+        opts.pi_prior = parent.pi_prior
+        opts.theta_prior = parent.theta_prior
+        # Ensure sub_matrix is the backend-aware sparse class
+        sub_matrix = parent._csr_class(sub_matrix)
+        return cls(sub_matrix, opts)
+
+    def em_parallel(self, use_likelihood=False, loglev=lg.WARNING, n_workers=None):
+        """Run EM with block decomposition for independent components.
+
+        Decomposes the score matrix into connected components and runs EM
+        on each block. Uses ThreadPoolExecutor when backend is cpu_optimized
+        (Numba releases the GIL). Falls back to sequential otherwise.
+
+        Args:
+            use_likelihood: Use log-likelihood for convergence.
+            loglev: Logging level.
+            n_workers: Number of worker threads. Defaults to number of blocks.
+        """
+        from .decompose import find_blocks, split_matrix, merge_results
+        from .backend import get_backend
+        import scipy.sparse
+
+        n_components, labels = find_blocks(self.raw_scores)
+        lg.log(loglev, 'Block decomposition: {} components'.format(n_components))
+
+        if n_components == 1:
+            lg.log(loglev, 'Single block, falling back to standard EM')
+            return self.em(use_likelihood=use_likelihood, loglev=loglev)
+
+        blocks = split_matrix(self.raw_scores, labels, n_components)
+
+        def _solve_block(block_info):
+            sub_matrix, feat_indices, row_indices = block_info
+            sub_tl = TelescopeLikelihood._from_block(sub_matrix, self)
+            sub_tl.em(use_likelihood=use_likelihood, loglev=lg.DEBUG)
+            return (sub_tl.pi, sub_tl.theta, sub_tl.z, sub_tl.lnl)
+
+        backend = get_backend()
+        if backend.name == 'cpu_optimized':
+            from concurrent.futures import ThreadPoolExecutor
+            _n = n_workers or n_components
+            lg.log(loglev, 'Parallel EM: {} workers for {} blocks'.format(_n, n_components))
+            with ThreadPoolExecutor(max_workers=_n) as pool:
+                block_results = list(pool.map(_solve_block, blocks))
+        else:
+            lg.log(loglev, 'Sequential EM: {} blocks'.format(n_components))
+            block_results = [_solve_block(b) for b in blocks]
+
+        # Merge results back into full-size arrays
+        pi, theta, z_rows, z_cols, z_data, lnl = merge_results(
+            block_results, blocks, self.K
+        )
+
+        N = self.raw_scores.shape[0]
+        self.pi = pi
+        self.theta = theta
+        self.z = self._csr_class(
+            scipy.sparse.csr_matrix(
+                (z_data, (z_rows, z_cols)), shape=(N, self.K)
+            )
+        )
+        self.lnl = lnl
+
+        # Set pi_init from first block (approximate)
+        self.pi_init = pi.copy()
+
+        lg.log(loglev, 'EM parallel completed across {} blocks.'.format(n_components))
+        lg.log(loglev, 'Final log-likelihood: {:f}.'.format(self.lnl))
+        return

@@ -158,6 +158,14 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
                                self.data.dtype, count=len(self.data))
         return ret
 
+    def threshold_filter(self, threshold):
+        """Set values below threshold to 0."""
+        return self.apply_func(lambda x: x if x >= threshold else 0)
+
+    def indicator(self):
+        """Set positive values to 1, others to 0."""
+        return self.apply_func(lambda x: 1 if x > 0 else 0)
+
     def save(self, filename):
         np.savez(filename, data=self.data, indices=self.indices,
                  indptr=self.indptr, shape=self.shape)
