@@ -1,11 +1,9 @@
 Polymerase
 ========
 
-###### *Single locus resolution of* **T***ransposable* **ELE***ment expression.*
-
 **Based on the original [Telescope](https://github.com/mlbendall/telescope) project by Matthew Bendall.**
 
-**Affiliations:**
+**Original Telescope Affiliations:**
 
 + [Computational Biology Institute](http://cbi.gwu.edu) at George Washington University
 + [Weill Cornell Medicine Division of Infectious Diseases](https://medicine.weill.cornell.edu/divisions-programs/infectious-diseases)
