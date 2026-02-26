@@ -3,12 +3,6 @@
 __author__ = 'Matthew L. Bendall'
 __copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
 
-from __future__ import division
-from builtins import range
-from past.utils import old_div
-from builtins import object
-__author__ = 'bendall'
-
 import re
 from collections import defaultdict, namedtuple, Counter, OrderedDict
 from bisect import bisect_left,bisect_right
@@ -28,7 +22,7 @@ class _AnnotationBisect(object):
         self._intE = {}                       # Dictionary containing lists of interval end positions for each reference
 
         # GTF filehandle
-        fh = open(gtffile,'rU') if isinstance(gtffile,str) else gtffile
+        fh = open(gtffile,'r') if isinstance(gtffile,str) else gtffile
         features = (GTFRow(*l.strip('\n').split('\t')) for l in fh if not l.startswith('#'))
         for i,f in enumerate(features):
             attr = dict(re.findall('(\w+)\s+"(.+?)";', f.attribute))

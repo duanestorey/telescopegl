@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """ Helper functions
 """
-from __future__ import division
+import re
 
-from past.utils import old_div
 import numpy as np
 from itertools import zip_longest
 
@@ -62,11 +61,11 @@ def eprob(Q):
         >>> eprob(ord('@')-33)
         0.9992056717652757
     """
-    return 1 - (10**(old_div(float(Q), -10)))
+    return 1 - (10**(float(Q) / -10))
 
 
 def format_minutes(seconds):
-    mins = old_div(seconds, 60)
+    mins = seconds // 60
     secs = seconds % 60
     return '%d minutes and %d secs' % (mins,secs)
 
@@ -108,7 +107,7 @@ class GenomeRegion:
     """
     def __init__(self, chrom=None, start=None, end=None, region=None):
         if region is not None:
-            m = re.match('(\w+):(\d+)-(\d+)', region)
+            m = re.match(r'(\w+):(\d+)-(\d+)', region)
             self.chrom = m.group(1)
             self.start, self.end = int(m.group(2)), int(m.group(3))
         else:
@@ -145,6 +144,41 @@ def grouper(iterable, n, fillvalue=None):
     # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
     args = [iter(iterable)] * n
     return zip_longest(*args, fillvalue=fillvalue)
+
+def merge_overlapping_regions(regions, padding=0):
+    """Merge overlapping genomic regions.
+
+    Args:
+        regions: List of (chrom, start, end) tuples.
+        padding: bp to add around each region before merging.
+
+    Returns:
+        List of merged (chrom, start, end) tuples.
+    """
+    if not regions:
+        return []
+
+    # Group by chromosome
+    by_chrom = {}
+    for chrom, start, end in regions:
+        by_chrom.setdefault(chrom, []).append(
+            (max(0, start - padding), end + padding)
+        )
+
+    merged = []
+    for chrom in sorted(by_chrom):
+        intervals = sorted(by_chrom[chrom])
+        current_start, current_end = intervals[0]
+        for start, end in intervals[1:]:
+            if start <= current_end:
+                current_end = max(current_end, end)
+            else:
+                merged.append((chrom, current_start, current_end))
+                current_start, current_end = start, end
+        merged.append((chrom, current_start, current_end))
+
+    return merged
+
 
 def str2int(s):
     try:

@@ -2,10 +2,6 @@
 """ Telescope id
 
 """
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import super
-
 import sys
 import os
 from time import time
@@ -21,6 +17,7 @@ from . import utils
 from .utils.helpers import format_minutes as fmtmins
 from .utils.model import Telescope, scTelescope, TelescopeLikelihood
 from .utils.annotation import get_annotation_class
+from .utils import backend
 
 __author__ = 'Matthew L. Bendall'
 __copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
@@ -182,6 +179,10 @@ class BulkIDOptions(IDOptions):
         - skip_em:
             action: store_true
             help: Exits after loading alignment and saving checkpoint file.
+    - Performance Options:
+        - parallel_blocks:
+            action: store_true
+            help: Decompose into independent blocks and solve in parallel.
     """
 
     old_opts = """
@@ -350,6 +351,10 @@ class scIDOptions(IDOptions):
         - skip_em:
             action: store_true
             help: Exits after loading alignment and saving checkpoint file.
+    - Performance Options:
+        - parallel_blocks:
+            action: store_true
+            help: Decompose into independent blocks and solve in parallel.
     """
 
     old_opts = """
@@ -381,6 +386,7 @@ def run(args, sc = True):
     option_class = scIDOptions if sc == True else BulkIDOptions
     opts = option_class(args, sc = sc)
     utils.configure_logging(opts)
+    backend.configure()
     lg.info('\n{}\n'.format(opts))
     total_time = time()
 
@@ -436,7 +442,10 @@ def run(args, sc = True):
     ''' Run Expectation-Maximization '''
     lg.info('Running Expectation-Maximization...')
     stime = time()
-    ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
+    if getattr(opts, 'parallel_blocks', False):
+        ts_model.em_parallel(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
+    else:
+        ts_model.em(use_likelihood=opts.use_likelihood, loglev=lg.INFO)
     lg.info("EM completed in %s" % fmtmins(time() - stime))
 
     # Output final report

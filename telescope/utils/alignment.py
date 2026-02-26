@@ -2,10 +2,6 @@
 """ Parse SAM/BAM alignment files
 
 """
-from __future__ import (absolute_import, division,
-                        print_function, unicode_literals)
-from builtins import *
-
 import os
 from collections import Counter
 import logging as lg
@@ -13,7 +9,6 @@ import logging as lg
 import pysam
 
 from telescope.utils.calignment import AlignedPair
-# from ._alignment import AlignedPair
 from . import model
 from . import BIG_INT
 
@@ -194,7 +189,7 @@ def fetch_region(samfile, annotation, opts, region):
     _omode, _othresh = opts['overlap_mode'], opts['overlap_threshold']
     _tempdir = opts['tempdir']
 
-    assign = model.Assigner(annotation, _nfkey, _omode, _othresh).assign_func()
+    assign = model.Assigner(annotation, _nfkey, _omode, _othresh, opts.get('stranded_mode')).assign_func()
 
     _minAS, _maxAS = BIG_INT, -BIG_INT
     _unaligned = 0
@@ -202,7 +197,7 @@ def fetch_region(samfile, annotation, opts, region):
     mfile = os.path.join(_tempdir, 'tmp_map.{}.{}.{}.txt'.format(*region))
 
     fh = open(mfile, 'w')
-    with pysam.AlignmentFile(samfile) as sf:
+    with pysam.AlignmentFile(samfile, threads=2) as sf:
         samiter = sf.fetch(*region, multiple_iterators=True)
         regtup = (sf.get_tid(region[0]), region[1], region[2])
         for ci, aln in fetch_pairs_sorted(samiter, regtup):

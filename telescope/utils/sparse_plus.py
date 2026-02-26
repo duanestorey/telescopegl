@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
 """ Provides sparse matrix classes augmented with additional functions
 """
-from __future__ import division
-
-from future import standard_library
-standard_library.install_aliases()
-from builtins import range
-
 import numpy as np
 import scipy.sparse
 
@@ -163,6 +157,14 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
         ret.data = np.fromiter((func(v) for v in self.data),
                                self.data.dtype, count=len(self.data))
         return ret
+
+    def threshold_filter(self, threshold):
+        """Set values below threshold to 0."""
+        return self.apply_func(lambda x: x if x >= threshold else 0)
+
+    def indicator(self):
+        """Set positive values to 1, others to 0."""
+        return self.apply_func(lambda x: 1 if x > 0 else 0)
 
     def save(self, filename):
         np.savez(filename, data=self.data, indices=self.indices,

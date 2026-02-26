@@ -2,10 +2,6 @@
 """ Parse SAM/BAM alignment files
 
 """
-from __future__ import (absolute_import, division,
-                        print_function, unicode_literals)
-from builtins import *
-
 from .helpers import merge_blocks
 
 __author__ = 'Matthew L. Bendall'

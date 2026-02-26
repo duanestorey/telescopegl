@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
-from builtins import object
 
 import os
-from nose import with_setup
-from nose.tools import assert_equals
-from random import randrange
+import pytest
 
 from telescope.tests import TEST_DATA_DIR
 from telescope.utils.annotation import get_annotation_class
@@ -13,38 +10,33 @@ __author__ = 'Matthew L. Bendall'
 __copyright__ = "Copyright (C) 2019 Matthew L. Bendall"
 
 
-class TestAnnotationIntervalTree(object):
+class TestAnnotationIntervalTree:
 
     @classmethod
     def setup_class(cls):
-        print("setup_class() before any methods in this class")
         cls.AnnotationClass = get_annotation_class('intervaltree')
 
     @classmethod
     def teardown_class(cls):
-        print("teardown_class() after any methods in this class")
         del cls.AnnotationClass
 
-    def setup(self):
-        print("TestAnnotationIntervalTree:setup() before each test method")
+    def setup_method(self):
         self.gtffile = os.path.join(TEST_DATA_DIR, 'annotation_test.2.gtf')
-        self.A = self.AnnotationClass(self.gtffile, 'locus')
+        self.A = self.AnnotationClass(self.gtffile, 'locus', None)
 
-    def teardown(self):
-        print("TestAnnotationIntervalTree:teardown() after each test method")
+    def teardown_method(self):
         del self.A
 
     def test_correct_type(self):
         assert type(self.A) is get_annotation_class('intervaltree')
 
     def test_annot_created(self):
-        print(type(self.A))
-        assert_equals(self.A.key, 'locus')
+        assert self.A.key == 'locus'
 
     def test_annot_treesize(self):
-        assert_equals(len(self.A.itree['chr1']), 3)
-        assert_equals(len(self.A.itree['chr2']), 4)
-        assert_equals(len(self.A.itree['chr3']), 2)
+        assert len(self.A.itree['chr1']) == 3
+        assert len(self.A.itree['chr2']) == 4
+        assert len(self.A.itree['chr3']) == 2
 
     def test_empty_lookups(self):
         assert not self.A.intersect_blocks('chr1', [(1, 9999)])
@@ -58,7 +50,7 @@ class TestAnnotationIntervalTree(object):
         assert not self.A.intersect_blocks('chrX', [(1, 1000000000)])
 
     def test_simple_lookups(self):
-        lines = (l.strip('\n').split('\t') for l in open(self.gtffile, 'rU'))
+        lines = (l.strip('\n').split('\t') for l in open(self.gtffile, 'r'))
         for l in lines:
             iv = (int(l[3]), int(l[4]))
             loc = l[8].split('"')[1]
