@@ -65,3 +65,8 @@ telescope/telescope_tag.py
 telescope/utils/oldmodel.py
 telescope-TE_counts.tsv
 telescope-run_stats.tsv
+
+# Test data (large BAM files excluded, 1% data checked in)
+test_data/*
+!test_data/SRR9666161_1pct_collated.bam
+!test_data/retro.hg38.gtf

@@ -140,14 +140,29 @@ def pair_bundle(alniter):
         yield AlignedPair(aln)
 
 
+def _find_primary(alns):
+    """Find primary alignment for fragment classification.
+
+    Returns the first non-supplementary, non-secondary alignment.
+    Falls back to alns[0] if all alignments are supplementary/secondary.
+    """
+    for a in alns:
+        if not a.is_supplementary and not a.is_secondary:
+            return a
+    return alns[0]
+
+
 def fetch_fragments_seq(samfile, **kwargs):
     b_iter = fetch_bundle(samfile, **kwargs)
     for alns in b_iter:
-        if not alns[0].is_paired:
-            _code = CODE_INT['SU'] if alns[0].is_unmapped else CODE_INT['SM']
+        # Use primary alignment for classification, not alns[0] which
+        # may be a supplementary alignment depending on BAM sort order.
+        primary = _find_primary(alns)
+        if not primary.is_paired:
+            _code = CODE_INT['SU'] if primary.is_unmapped else CODE_INT['SM']
             yield (_code, [AlignedPair(a) for a in alns])
         else:
-            if alns[0].is_proper_pair:
+            if primary.is_proper_pair:
                 yield (CODE_INT['PM'], list(pair_bundle(alns)))
             else:
                 if len(alns) == 2 and all(a.is_unmapped for a in alns):

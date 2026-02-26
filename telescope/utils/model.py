@@ -208,32 +208,44 @@ class Telescope(object):
         """Extract TE locus coordinates with padding, merge overlapping.
 
         Args:
-            annotation: Annotation object with loci dict.
+            annotation: Annotation object with itree or loci dict.
             padding: bp to add around each region.
 
         Returns:
             List of merged (chrom, start, end) tuples.
         """
         regions = []
-        for locus_name, locus_data in annotation.loci.items():
-            if hasattr(locus_data, 'chrom'):
-                regions.append((locus_data.chrom, locus_data.start, locus_data.end))
-            elif hasattr(annotation, 'itree'):
-                for chrom, tree in annotation.itree.items():
-                    for iv in tree:
-                        if hasattr(iv, 'data') and iv.data == locus_name:
-                            regions.append((chrom, iv.begin, iv.end))
+        if hasattr(annotation, 'itree'):
+            for chrom, tree in annotation.itree.items():
+                for iv in tree:
+                    regions.append((chrom, iv.begin, iv.end))
+        else:
+            for locus_name, locus_data in annotation.loci.items():
+                if isinstance(locus_data, list):
+                    for row in locus_data:
+                        regions.append((row.chrom, int(row.start), int(row.end)))
+                elif hasattr(locus_data, 'chrom'):
+                    regions.append((locus_data.chrom, locus_data.start, locus_data.end))
         if not regions:
             return []
         return merge_overlapping_regions(regions, padding=padding)
 
-    def _load_prefiltered(self, annotation):
-        """Load alignments using index-based region pre-filtering.
+    def _load_indexed(self, annotation):
+        """Load alignments from coordinate-sorted indexed BAM.
 
-        Only fetches reads from genomic regions overlapping TE loci,
-        avoiding full BAM scan.
+        Two-pass approach for correctness:
+          Phase 1: Fetch from TE regions to identify relevant fragment names.
+          Phase 2: Stream full BAM, buffer ALL alignments for relevant
+                   fragments (including mates and non-TE mappings).
+          Phase 3: Process buffered fragments with identical logic to
+                   _load_sequential (same pairing, thresholds, __no_feature).
+
+        This produces identical matrices to _load_sequential while skipping
+        the expensive assign() calls for the ~99.5% of fragments that don't
+        overlap any TE region.
         """
-        _update_sam = self.opts.updated_sam
+        from .calignment import AlignedPair
+
         _nfkey = self.opts.no_feature_key
         _omode, _othresh = self.opts.overlap_mode, self.opts.overlap_threshold
 
@@ -243,58 +255,104 @@ class Telescope(object):
 
         alninfo = Counter()
         te_regions = self._get_te_regions(annotation)
-        lg.info('Pre-filtering: {} merged TE regions'.format(len(te_regions)))
+        lg.info('Indexed loading: {} merged TE regions'.format(len(te_regions)))
 
-        # Get total fragment count from BAI index
-        _threads = getattr(self.opts, 'ncpu', 1)
+        _threads = min(4, max(1, getattr(self.opts, 'ncpu', 1)))
+
+        # Phase 1: Fetch from TE regions to identify relevant fragment names
+        relevant_names = set()
         with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
                                  threads=_threads) as sf:
-            alninfo['total_fragments'] = (sf.mapped + sf.unmapped) // 2
-
-            _minAS, _maxAS = BIG_INT, -BIG_INT
-            seen_reads = set()
-
             for chrom, start, end in te_regions:
                 try:
-                    for ci, alns in alignment.fetch_fragments_seq(
-                            sf, region=(chrom, start, end)):
-                        # Deduplicate across regions
-                        qid = alns[0].query_id
-                        if qid in seen_reads:
-                            continue
-                        seen_reads.add(qid)
-
-                        _code = alignment.CODES[ci][0]
-                        alninfo[_code] += 1
-
-                        if _code == 'SU' or _code == 'PU':
-                            continue
-
-                        _mapped = [a for a in alns if not a.is_unmapped]
-                        _scores = [a.alnscore for a in _mapped]
-                        _minAS = min(_minAS, *_scores)
-                        _maxAS = max(_maxAS, *_scores)
-
-                        overlap_feats = list(map(assign, _mapped))
-                        has_overlap = any(f != _nfkey for f in overlap_feats)
-
-                        if not has_overlap:
-                            continue
-
-                        _ambig = len(_mapped) > 1
-                        alninfo['feat_{}'.format('A' if _ambig else 'U')] += 1
-
-                        for m in process_overlap_frag(_mapped, overlap_feats):
-                            _mappings.append((ci, m[0], m[1], m[2], m[3]))
+                    for aln in sf.fetch(chrom, start, end):
+                        if not aln.is_unmapped:
+                            relevant_names.add(aln.query_name)
                 except ValueError:
-                    # Region not in BAM (e.g. unmatched contig)
                     continue
 
-        # Handle unmapped count
-        mapped_count = sum(alninfo.get(c, 0) for c in ['SM', 'PM', 'PX'])
-        alninfo['unmapped'] = alninfo['total_fragments'] - mapped_count
-        alninfo['unique'] = alninfo.get('feat_U', 0)
-        alninfo['ambig'] = alninfo.get('feat_A', 0)
+        lg.info('Phase 1: {} fragments overlap TE regions'.format(
+            len(relevant_names)))
+
+        # Phase 2: Stream full BAM, buffer ALL alignments for relevant fragments
+        read_buffer = defaultdict(list)
+        with pysam.AlignmentFile(self.opts.samfile, check_sq=False,
+                                 threads=_threads) as sf:
+            _total_mapped = sf.mapped
+            _total_unmapped = sf.unmapped
+            for aln in sf.fetch(until_eof=True):
+                if aln.query_name in relevant_names:
+                    read_buffer[aln.query_name].append(aln)
+
+        lg.info('Phase 2: Buffered {} alignments for {} fragments'.format(
+            sum(len(v) for v in read_buffer.values()), len(read_buffer)))
+
+        _minAS, _maxAS = BIG_INT, -BIG_INT
+
+        for qname, alns in read_buffer.items():
+            # Sort to match collated BAM order: primary alignments first,
+            # then secondary, then supplementary. This ensures alns[0]
+            # is the primary alignment, making is_proper_pair classification
+            # independent of BAM sort order.
+            alns.sort(key=lambda a: (a.is_supplementary, a.is_secondary))
+
+            # Mirror fetch_fragments_seq classification logic
+            aln0 = alns[0]
+            if not aln0.is_paired:
+                _code = 'SU' if aln0.is_unmapped else 'SM'
+                ci = alignment.CODE_INT[_code]
+                pairs = [AlignedPair(a) for a in alns]
+            else:
+                if aln0.is_proper_pair:
+                    ci = alignment.CODE_INT['PM']
+                    pairs = list(alignment.pair_bundle(alns))
+                else:
+                    if len(alns) == 2 and all(a.is_unmapped for a in alns):
+                        ci = alignment.CODE_INT['PU']
+                        pairs = [AlignedPair(alns[0], alns[1])]
+                    else:
+                        ci = alignment.CODE_INT['PX']
+                        pairs = [AlignedPair(a) for a in alns]
+
+            # Filter to mapped pairs
+            _mapped = [p for p in pairs if not p.is_unmapped]
+            if not _mapped:
+                continue
+
+            # Ambiguity by mapped count (same as sequential)
+            _ambig = len(_mapped) > 1
+
+            # Update score range
+            _scores = [p.alnscore for p in _mapped]
+            _minAS = min(_minAS, *_scores)
+            _maxAS = max(_maxAS, *_scores)
+
+            # Assign overlaps
+            overlap_feats = list(map(assign, _mapped))
+            has_overlap = any(f != _nfkey for f in overlap_feats)
+
+            if not has_overlap:
+                alninfo['nofeat_{}'.format('A' if _ambig else 'U')] += 1
+                continue
+
+            alninfo['feat_{}'.format('A' if _ambig else 'U')] += 1
+
+            # Single-cell barcode
+            if self.single_cell and aln0.has_tag(self.opts.barcode_tag):
+                self.read_barcodes[pairs[0].query_id] = aln0.get_tag(
+                    self.opts.barcode_tag)
+
+            for m in process_overlap_frag(_mapped, overlap_feats):
+                _mappings.append((ci, m[0], m[1], m[2], m[3]))
+
+        # Derive stats — use index for totals, computed for overlap stats
+        alninfo['total_fragments'] = (_total_mapped + _total_unmapped) // 2
+        alninfo['pair_mapped'] = _total_mapped // 2
+        alninfo['pair_mixed'] = 0
+        alninfo['single_mapped'] = 0
+        alninfo['unmapped'] = _total_unmapped // 2
+        alninfo['unique'] = alninfo.get('nofeat_U', 0) + alninfo.get('feat_U', 0)
+        alninfo['ambig'] = alninfo.get('nofeat_A', 0) + alninfo.get('feat_A', 0)
 
         if _maxAS < _minAS:
             _minAS, _maxAS = 0, 0
@@ -305,7 +363,11 @@ class Telescope(object):
         self.run_info['annotated_features'] = len(annotation.loci)
         self.feature_length = annotation.feature_length().copy()
 
-        if self.opts.ncpu > 1:
+        _update_sam = getattr(self.opts, 'updated_sam', False)
+        if self.has_index and not _update_sam:
+            lg.info('Coordinate-sorted indexed BAM detected, using region-based loading')
+            maps, scorerange, alninfo = self._load_indexed(annotation)
+        elif self.opts.ncpu > 1:
             maps, scorerange, alninfo = self._load_parallel(annotation)
         else:
             maps, scorerange, alninfo = self._load_sequential(annotation)

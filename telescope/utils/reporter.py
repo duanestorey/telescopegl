@@ -54,7 +54,7 @@ def output_report(telescope_obj, tl, stats_filename, counts_filename):
         return key, tl.reassign(method, thresh, initial).sum(0).A1
 
     backend = get_backend()
-    if backend.name == 'cpu_optimized':
+    if backend.threadsafe_parallelism:
         with ThreadPoolExecutor(max_workers=len(_tasks)) as pool:
             reassign_results = dict(pool.map(_do_reassign, _tasks))
     else:

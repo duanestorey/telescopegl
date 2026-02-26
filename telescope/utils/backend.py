@@ -17,6 +17,7 @@ class BackendInfo:
     has_numba: bool = False
     has_mkl: bool = False
     has_gpu: bool = False
+    threadsafe_parallelism: bool = False
 
 
 # Module-level singleton
@@ -29,6 +30,26 @@ def _detect_numba():
         import numba  # noqa: F401
         return True
     except ImportError:
+        return False
+
+
+def _detect_threadsafe_threading():
+    """Check if Numba's threading layer supports concurrent access.
+
+    The workqueue layer (default) is NOT threadsafe and will crash if
+    Numba parallel functions are called from multiple Python threads.
+    TBB and OpenMP layers are threadsafe.
+    """
+    try:
+        import numba
+        layer = getattr(numba.config, 'THREADING_LAYER', 'default')
+        # After JIT compilation, we can check the actual active layer
+        # But before that, we check the configured preference
+        if layer in ('tbb', 'omp'):
+            return True
+        # 'default' or 'workqueue' — not safe for concurrent access
+        return False
+    except (ImportError, AttributeError):
         return False
 
 
@@ -54,10 +75,12 @@ def configure(use_gpu=False):
     has_numba = _detect_numba()
     has_mkl = _detect_mkl()
 
+    threadsafe = _detect_threadsafe_threading() if has_numba else False
+
     if has_numba:
         name = 'cpu_optimized'
-        lg.info('Backend: cpu_optimized (numba={}, mkl={})'.format(
-            has_numba, has_mkl))
+        lg.info('Backend: cpu_optimized (numba={}, mkl={}, threadsafe={})'.format(
+            has_numba, has_mkl, threadsafe))
     else:
         name = 'cpu_stock'
         lg.info('Backend: cpu_stock (scipy only)')
@@ -67,6 +90,7 @@ def configure(use_gpu=False):
         has_numba=has_numba,
         has_mkl=has_mkl,
         has_gpu=False,
+        threadsafe_parallelism=threadsafe,
     )
     return _active_backend
 

@@ -254,7 +254,7 @@ class TelescopeLikelihood(object):
             return (sub_tl.pi, sub_tl.theta, sub_tl.z, sub_tl.lnl)
 
         backend = get_backend()
-        if backend.name == 'cpu_optimized':
+        if backend.threadsafe_parallelism:
             from concurrent.futures import ThreadPoolExecutor
             _n = n_workers or n_components
             lg.log(loglev, 'Parallel EM: {} workers for {} blocks'.format(_n, n_components))

@@ -146,7 +146,10 @@ class TestMergeResults:
         assert pi.shape == (K,)
         assert theta.shape == (K,)
         assert lnl == 200.0  # Sum of block lnls
-        assert np.all(pi == 0.5)
+        # After normalization, pi sums to 1.0 globally
+        # 4 features × 0.5 each → sum=2.0 → normalized to 0.25 each
+        np.testing.assert_almost_equal(pi.sum(), 1.0)
+        assert np.all(pi == 0.25)
         assert np.all(theta == 0.25)
 
     def test_round_trip_z_shape(self, two_block_matrix):

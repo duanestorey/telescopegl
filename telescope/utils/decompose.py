@@ -95,4 +95,9 @@ def merge_results(block_results, blocks_info, K):
     z_cols = np.concatenate(z_cols) if z_cols else np.array([], dtype=np.intp)
     z_data = np.concatenate(z_data) if z_data else np.array([], dtype=np.float64)
 
+    # Renormalize pi to sum to 1 across all blocks
+    pi_sum = pi.sum()
+    if pi_sum > 0:
+        pi /= pi_sum
+
     return pi, theta, z_rows, z_cols, z_data, total_lnl
