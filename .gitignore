@@ -4,10 +4,10 @@
 # Compiled python files
 *.py[cod]
 __pycache__
- 
+
 # C extensions
 *.so
- 
+
 # Packages
 *.egg
 *.egg-info
@@ -21,18 +21,18 @@ develop-eggs
 .installed.cfg
 lib
 lib64
- 
+
 # Installer logs
 pip-log.txt
- 
+
 # Unit test / coverage reports
 .coverage
 .tox
 nosetests.xml
- 
+
 # Translations
 *.mo
- 
+
 # Mr Developer
 .mr.developer.cfg
 .project
@@ -53,18 +53,14 @@ mprofile*.sh
 mprofile*.py
 src/*.c
 _dist
-telescope/utils/*.c
-telescope/data/*
-!telescope/data/alignment.bam
-!telescope/data/annotation.gtf
-!telescope/data/telescope_report.tsv
-telescope-checkpoint.npz
-telescope/telescope_id.py
-telescope/telescope_load.py
-telescope/telescope_tag.py
-telescope/utils/oldmodel.py
-telescope-TE_counts.tsv
-telescope-run_stats.tsv
+polymerase/alignment/*.c
+polymerase/data/*
+!polymerase/data/alignment.bam
+!polymerase/data/annotation.gtf
+!polymerase/data/report.tsv
+polymerase-checkpoint.npz
+polymerase-TE_counts.tsv
+polymerase-run_stats.tsv
 
 # Test data (large BAM files excluded, 1% data checked in)
 test_data/*

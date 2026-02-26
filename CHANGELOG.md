@@ -4,7 +4,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased](https://github.com/duanestorey/telescopegl/tree/main)
+## [2.0.0](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-26
 
 ### Added
 
@@ -15,10 +15,10 @@ All notable changes to this project will be documented in this file.
   Auto-detected when BAM has a `.bai` index.
 
 - **Backend abstraction** (`backend.py`): Auto-detects available acceleration
-  libraries. CPU-Optimized/Numba+MKL → Stock CPU/scipy. Configured via
+  libraries. CPU-Optimized/Numba+MKL -> Stock CPU/scipy. Configured via
   `backend.configure()`, accessed via `get_backend()` and `get_sparse_class()`.
 
-- **Numba JIT sparse kernels** (`cpu_optimized_sparse.py`):
+- **Numba JIT sparse kernels** (`numba_matrix.py`):
   `CpuOptimizedCsrMatrix` subclass of `csr_matrix_plus` with `@numba.njit`
   kernels for `binmax`, `choose_random`, `threshold_filter`, `indicator`.
   Falls back to stock scipy when Numba not installed.
@@ -60,11 +60,18 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Renamed project from Telescope to Polymerase**: Full package restructure into
+  extensible subpackages (`cli/`, `core/`, `sparse/`, `annotation/`, `alignment/`,
+  `utils/`). Classes renamed: `Telescope` → `Polymerase`, `scTelescope` →
+  `scPolymerase`, `TelescopeLikelihood` → `PolymeraseLikelihood`. CLI commands
+  are now `polymerase assign` and `polymerase resume`. Attribution to the original
+  Telescope project by Matthew Bendall is preserved throughout.
+
 - **Coordinate-sorted BAMs now supported**: Previously required collated/name-sorted
   BAMs. Indexed BAMs are now auto-detected and use the faster region-based loading
   path.
 
-- **Module split**: `model.py` (833 lines) split into `model.py` (Telescope
+- **Module split**: `model.py` (833 lines) split into `model.py` (Polymerase
   orchestrator + BAM loading), `likelihood.py` (EM algorithm), `reporter.py`
   (output I/O). Backward-compatible re-exports maintained.
 
@@ -106,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Previous versions
 
 Prior to this CHANGELOG, changes were tracked in [README.md](./README.md).
-The previous version history is relocated here:
+The previous version history from the original Telescope project is relocated here:
 
 ### v1.0.3.1
 
@@ -142,13 +149,13 @@ The previous version history is relocated here:
   + Changes to logging/reporting
 
 #### v0.5.3
-  + Improvements to `telescope resume`
+  + Improvements to `polymerase resume`
 
 #### v0.5.2
-  + Implemented checkpoint and `telescope resume`
+  + Implemented checkpoint and `polymerase resume`
 
 #### v0.5.1
-  + Refactoring Telescope class with TelescopeLikelihood
+  + Refactoring Polymerase class with PolymeraseLikelihood
   + Improved memory usage
 
 #### v0.4.2

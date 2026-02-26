@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" Setup telescope-ngs package
+""" Setup polymerase package
 
 """
 from __future__ import print_function
@@ -35,8 +35,8 @@ except (ImportError, IndexError):
 
 ext = '.pyx' if USE_CYTHON else '.c'
 extensions = [
-    Extension("telescope.utils.calignment",
-              ["telescope/utils/calignment"+ext],
+    Extension("polymerase.alignment.calignment",
+              ["polymerase/alignment/calignment"+ext],
               include_dirs=htslib_include_dirs,
               ),
 ]
@@ -44,10 +44,10 @@ extensions = [
 if USE_CYTHON:
     from Cython.Build import cythonize
     extensions = cythonize(extensions,
-                           include_path=['telescope/utils'] + htslib_include_dirs)
+                           include_path=['polymerase/alignment'] + htslib_include_dirs)
 
 setup(
-    name='telescope-ngs',
+    name='polymerase',
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
     packages=find_packages(),
@@ -69,7 +69,7 @@ setup(
     # Runnable scripts
     entry_points={
         'console_scripts': [
-            'telescope=telescope.__main__:main',
+            'polymerase=polymerase.__main__:main',
         ],
     },
 
@@ -78,10 +78,10 @@ setup(
 
     # data
     package_data = {
-        'telescope': [
+        'polymerase': [
             'data/alignment.bam',
             'data/annotation.gtf',
-            'data/telescope_report.tsv'
+            'data/report.tsv'
         ],
     },
 
@@ -91,7 +91,7 @@ setup(
     description='Single locus resolution of Transposable ELEment expression using next-generation sequencing.',
     license='MIT',
     keywords='',
-    url='https://github.com/mlbendall/telescope',
+    url='https://github.com/duanestorey/polymerase',
 
     zip_safe=False
 )
