@@ -16,3 +16,4 @@ dependencies:
   - intervaltree
   - pandas
   - samtools
+  - pytest
