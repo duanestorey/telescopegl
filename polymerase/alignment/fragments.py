@@ -125,7 +125,10 @@ def mate_in_region(aln, regtup):
 def fetch_bundle(samfile, **kwargs):
     """Iterate over alignment over reads with same ID"""
     samiter = samfile.fetch(**kwargs)
-    bundle = [next(samiter)]
+    try:
+        bundle = [next(samiter)]
+    except StopIteration:
+        return
     for aln in samiter:
         if aln.query_name == bundle[0].query_name:
             bundle.append(aln)
@@ -236,13 +239,13 @@ def fetch_region(samfile, annotation, opts, region):
 
     mfile = os.path.join(_tempdir, 'tmp_map.{}.{}.{}.txt'.format(*region))
 
-    fh = open(mfile, 'w')  # noqa: SIM115
-    with pysam.AlignmentFile(samfile, threads=2) as sf:
+    with open(mfile, 'w') as fh, pysam.AlignmentFile(samfile, threads=2) as sf:
         samiter = sf.fetch(*region, multiple_iterators=True)
         regtup = (sf.get_tid(region[0]), region[1], region[2])
         for ci, aln in fetch_pairs_sorted(samiter, regtup):
             if aln.is_unmapped:
-                assert CODES[ci][0] == 'PX*'
+                if CODES[ci][0] != 'PX*':
+                    lg.warning(f'Unexpected unmapped code: {CODES[ci][0]} (expected PX*)')
                 _unaligned += 1
                 continue
 
@@ -250,6 +253,4 @@ def fetch_region(samfile, annotation, opts, region):
             _minAS = min(_minAS, m[3])
             _maxAS = max(_maxAS, m[3])
             print('\t'.join(map(str, m)), file=fh)
-
-    fh.close()
     return mfile, (_minAS, _maxAS), _unaligned

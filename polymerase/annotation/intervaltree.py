@@ -40,41 +40,46 @@ class _AnnotationIntervalTree:
             _class_key = None
 
         # GTF filehandle
-        fh = open(gtf_file) if isinstance(gtf_file, str) else gtf_file  # noqa: SIM115
-        for rownum, line in enumerate(fh):
-            if line.startswith('#'):
-                continue
-            f = GTFRow(*line.strip('\n').split('\t'))
-            if f.feature != feature_type:
-                continue
-            attr = dict(re.findall(r'(\w+)\s+"(.+?)";', f.attribute))
-            attr['strand'] = f.strand
+        _opened = isinstance(gtf_file, str)
+        fh = open(gtf_file) if _opened else gtf_file  # noqa: SIM115
+        try:
+            for rownum, line in enumerate(fh):
+                if line.startswith('#'):
+                    continue
+                f = GTFRow(*line.strip('\n').split('\t'))
+                if f.feature != feature_type:
+                    continue
+                attr = dict(re.findall(r'(\w+)\s+"(.+?)";', f.attribute))
+                attr['strand'] = f.strand
 
-            # Filter by --classes if specified
-            if classes and _class_key and attr.get(_class_key, '') not in classes:
-                continue
+                # Filter by --classes if specified
+                if classes and _class_key and attr.get(_class_key, '') not in classes:
+                    continue
 
-            if self.key not in attr:
-                lg.warning(f'Skipping row {rownum}: missing attribute "{self.key}"')
-                continue
+                if self.key not in attr:
+                    lg.warning(f'Skipping row {rownum}: missing attribute "{self.key}"')
+                    continue
 
-            """ Add to locus list """
-            if attr[self.key] not in self.loci:
-                self.loci[attr[self.key]] = list()
-            self.loci[attr[self.key]].append(f)
-            """ Add to interval tree """
-            new_iv = Interval(int(f.start), int(f.end) + 1, attr)
-            # Merge overlapping intervals from same locus
-            overlap = self.itree[f.chrom].overlap(new_iv)
-            if len(overlap) > 0:
-                mergeable = [iv for iv in overlap if iv.data[self.key] == attr[self.key]]
-                if mergeable:
-                    for mergeable_iv in mergeable:
-                        new_iv = merge_intervals(
-                            mergeable_iv, new_iv, {self.key: attr[self.key], 'strand': attr['strand']}
-                        )
-                        self.itree[f.chrom].remove(mergeable_iv)
-            self.itree[f.chrom].add(new_iv)
+                """ Add to locus list """
+                if attr[self.key] not in self.loci:
+                    self.loci[attr[self.key]] = list()
+                self.loci[attr[self.key]].append(f)
+                """ Add to interval tree """
+                new_iv = Interval(int(f.start), int(f.end) + 1, attr)
+                # Merge overlapping intervals from same locus
+                overlap = self.itree[f.chrom].overlap(new_iv)
+                if len(overlap) > 0:
+                    mergeable = [iv for iv in overlap if iv.data[self.key] == attr[self.key]]
+                    if mergeable:
+                        for mergeable_iv in mergeable:
+                            new_iv = merge_intervals(
+                                mergeable_iv, new_iv, {self.key: attr[self.key], 'strand': attr['strand']}
+                            )
+                            self.itree[f.chrom].remove(mergeable_iv)
+                self.itree[f.chrom].add(new_iv)
+        finally:
+            if _opened:
+                fh.close()
 
     def feature_length(self):
         """Get feature lengths
@@ -123,6 +128,7 @@ class _AnnotationIntervalTree:
                     'key': self.key,
                     'loci': self.loci,
                     'itree': self.itree,
+                    'run_stranded': self.run_stranded,
                 },
                 outh,
             )
@@ -135,5 +141,5 @@ class _AnnotationIntervalTree:
         obj.key = loader['key']
         obj.loci = loader['loci']
         obj.itree = loader['itree']
-
+        obj.run_stranded = loader.get('run_stranded', False)
         return obj

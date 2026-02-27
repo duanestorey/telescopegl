@@ -56,6 +56,14 @@ class ComputeOps(ABC):
     def threshold(self, matrix, thresh):
         """Zero out values below *thresh*."""
 
+    @abstractmethod
+    def choose_random(self, matrix, axis):
+        """Randomly select one nonzero per row/column."""
+
+    @abstractmethod
+    def indicator(self, matrix):
+        """Binary indicator: 1 where nonzero, 0 elsewhere."""
+
     # --- Dense linear algebra ---
 
     @abstractmethod

@@ -13,7 +13,7 @@ from time import time
 from ..core.model import Polymerase, scPolymerase
 from ..sparse import backend
 from ..utils.helpers import format_minutes as fmtmins
-from . import configure_logging
+from . import backend_display_name, collect_output_files, configure_logging
 from .assign import IDOptions
 from .console import Stopwatch
 
@@ -103,6 +103,8 @@ class BulkResumeOptions(IDOptions):
     """
 
 
+# TODO: scResumeOptions is currently identical to BulkResumeOptions.
+# Collapse into a shared base once sc subcommands are implemented.
 class scResumeOptions(IDOptions):
     OPTS = """
     - Input Options:
@@ -211,9 +213,7 @@ def run(args, sc=True):
 
     console.section('Input')
     console.item('Checkpoint', os.path.basename(opts.checkpoint))
-    from .assign import _backend_display_name
-
-    console.item('Backend', _backend_display_name(backend.get_backend()))
+    console.item('Backend', backend_display_name(backend.get_backend()))
     console.blank()
 
     # Load checkpoint
@@ -271,9 +271,7 @@ def run(args, sc=True):
     registry.commit_all(opts.outdir, opts.exp_tag, console=console, stopwatch=sw)
 
     # Output file summary
-    from .assign import _collect_output_files
-
-    _output_files = _collect_output_files(opts.outdir)
+    _output_files = collect_output_files(opts.outdir)
     if _output_files:
         console.blank()
         console.section('Output ({} files in {})'.format(len(_output_files), opts.outdir + '/'))

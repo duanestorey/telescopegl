@@ -41,6 +41,8 @@ class GpuOps(ComputeOps):
 
     def _to_cpu(self, matrix):
         """Transfer back from GPU."""
+        if self._cpsparse.issparse(matrix):
+            return matrix.get()
         if scipy.sparse.issparse(matrix):
             return matrix
         if hasattr(matrix, 'get'):  # CuPy array
@@ -97,6 +99,20 @@ class GpuOps(ComputeOps):
             matrix = csr_matrix_plus(matrix)
         return matrix.threshold_filter(thresh)
 
+    def choose_random(self, matrix, axis):
+        from ..sparse.matrix import csr_matrix_plus
+
+        if not isinstance(matrix, csr_matrix_plus):
+            matrix = csr_matrix_plus(matrix)
+        return matrix.choose_random(axis)
+
+    def indicator(self, matrix):
+        from ..sparse.matrix import csr_matrix_plus
+
+        if not isinstance(matrix, csr_matrix_plus):
+            matrix = csr_matrix_plus(matrix)
+        return matrix.indicator()
+
     # --- Dense linear algebra ---
 
     def svd(self, matrix, k):
@@ -125,8 +141,6 @@ class GpuOps(ComputeOps):
         from sklearn.decomposition import NMF
 
         m = matrix.get() if hasattr(matrix, 'get') else np.asarray(matrix)
-        if scipy.sparse.issparse(m):
-            pass  # sklearn handles sparse
         model = NMF(n_components=n_components, init='nndsvd')
         W = model.fit_transform(m)
         H = model.components_
@@ -149,13 +163,13 @@ class GpuOps(ComputeOps):
         return gpu.get() if hasattr(gpu, 'get') else gpu
 
     def to_sparse(self, dense_matrix):
-        return scipy.sparse.csr_matrix(dense_matrix)
+        return self._cpsparse.csr_matrix(self._cp.asarray(dense_matrix))
 
     def zeros(self, shape, dtype=float):
-        return self._cp.zeros(shape, dtype=dtype).get()
+        return self._cp.zeros(shape, dtype=dtype)
 
     def array(self, data, dtype=None):
-        return self._cp.asarray(data, dtype=dtype).get()
+        return self._cp.asarray(data, dtype=dtype)
 
     def arange(self, *args):
-        return self._cp.arange(*args).get()
+        return self._cp.arange(*args)

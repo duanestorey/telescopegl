@@ -38,7 +38,7 @@ def process_overlap_frag(pairs, overlap_feats, write_tags=True):
             Set to False on the indexed path when --updated_sam is not
             requested, avoiding ~30% of per-fragment processing overhead.
     """
-    assert __debug__ and all(pairs[0].query_id == p.query_id for p in pairs)
+    assert all(pairs[0].query_id == p.query_id for p in pairs)
     byfeature = defaultdict(list)
     for pair, feat in zip(pairs, overlap_feats):
         byfeature[feat].append(pair)
@@ -99,12 +99,7 @@ def _resolve_duplicates_max(rows, cols, data, shape):
     # Take max within each group
     out_rows = rows[boundaries]
     out_cols = cols[boundaries]
-    out_data = np.empty(len(boundaries), dtype=np.uint16)
-
-    for idx in range(len(boundaries)):
-        start = boundaries[idx]
-        end = boundaries[idx + 1] if idx + 1 < len(boundaries) else len(data)
-        out_data[idx] = data[start:end].max()
+    out_data = np.maximum.reduceat(data, boundaries)
 
     return scipy.sparse.csr_matrix((out_data, (out_rows, out_cols)), shape=shape, dtype=np.uint16)
 
@@ -205,7 +200,7 @@ class Polymerase:
         return obj
 
     def get_random_seed(self):
-        ret = self.run_info['total_fragments'] % self.shape[0] * self.shape[1]
+        ret = self.run_info['total_fragments'] % (self.shape[0] * self.shape[1])
         # 2**32 - 1 = 4294967295
         return ret % 4294967295
 
@@ -414,28 +409,29 @@ class Polymerase:
         _minAS, _maxAS = BIG_INT, -BIG_INT
         alninfo = Counter()
         mfiles = []
-        pool = Pool(processes=self.opts.ncpu)
-        _loadfunc = functools.partial(
-            alignment.fetch_region,
-            self.opts.samfile,
-            annotation,
-            opt_d,
-        )
-        result = pool.map_async(_loadfunc, regions)
-        for mfile, scorerange, _pxu in result.get():
-            alninfo['unmap_x'] += _pxu
-            _minAS = min(scorerange[0], _minAS)
-            _maxAS = max(scorerange[1], _maxAS)
-            mfiles.append(mfile)
+        with Pool(processes=self.opts.ncpu) as pool:
+            _loadfunc = functools.partial(
+                alignment.fetch_region,
+                self.opts.samfile,
+                annotation,
+                opt_d,
+            )
+            result = pool.map_async(_loadfunc, regions)
+            for mfile, scorerange, _pxu in result.get():
+                alninfo['unmap_x'] += _pxu
+                _minAS = min(scorerange[0], _minAS)
+                _maxAS = max(scorerange[1], _maxAS)
+                mfiles.append(mfile)
 
         _miter = self._mapping_fromfiles(mfiles)
         return _miter, (_minAS, _maxAS), alninfo
 
     def _mapping_fromfiles(self, files):
         for f in files:
-            lines = (line.strip('\n').split('\t') for line in open(f))  # noqa: SIM115
-            for code, rid, fid, ascr, alen in lines:
-                yield (int(code), rid, fid, int(ascr), int(alen))
+            with open(f) as fh:
+                for line in fh:
+                    code, rid, fid, ascr, alen = line.strip('\n').split('\t')
+                    yield (int(code), rid, fid, int(ascr), int(alen))
 
     def _load_sequential(self, annotation):
         _update_sam = self.opts.updated_sam
@@ -453,60 +449,60 @@ class Polymerase:
                 bam_u = pysam.AlignmentFile(self.other_bam, 'wb', template=sf)
                 bam_t = pysam.AlignmentFile(self.tmp_bam, 'wb', template=sf)
 
-            _minAS, _maxAS = BIG_INT, -BIG_INT
-            for ci, alns in alignment.fetch_fragments_seq(sf, until_eof=True):
-                alninfo['total_fragments'] += 1
-                if alninfo['total_fragments'] % 500000 == 0:
-                    _print_progress(alninfo['total_fragments'])
+            try:
+                _minAS, _maxAS = BIG_INT, -BIG_INT
+                for ci, alns in alignment.fetch_fragments_seq(sf, until_eof=True):
+                    alninfo['total_fragments'] += 1
+                    if alninfo['total_fragments'] % 500000 == 0:
+                        _print_progress(alninfo['total_fragments'])
 
-                """ Count code """
-                _code = alignment.CODES[ci][0]
-                alninfo[_code] += 1
+                    """ Count code """
+                    _code = alignment.CODES[ci][0]
+                    alninfo[_code] += 1
 
-                """ Check whether fragment is mapped """
-                if _code == 'SU' or _code == 'PU':
+                    """ Check whether fragment is mapped """
+                    if _code == 'SU' or _code == 'PU':
+                        if _update_sam:
+                            alns[0].write(bam_u)
+                        continue
+
+                    """ If running with single cell data, add cell """
+                    if self.single_cell and alns[0].r1.has_tag(self.opts.barcode_tag):
+                        self.read_barcodes[alns[0].query_id] = dict(alns[0].r1.get_tags()).get(self.opts.barcode_tag)
+
+                    """ Fragment is ambiguous if multiple mappings"""
+                    _mapped = [a for a in alns if not a.is_unmapped]
+                    _ambig = len(_mapped) > 1
+
+                    """ Update min and max scores """
+                    _scores = [a.alnscore for a in _mapped]
+                    _minAS = min(_minAS, *_scores)
+                    _maxAS = max(_maxAS, *_scores)
+
+                    """ Check whether fragment overlaps annotation """
+                    overlap_feats = list(map(assign, _mapped))
+                    has_overlap = any(f != _nfkey for f in overlap_feats)
+
+                    """ Fragment has no overlap """
+                    if not has_overlap:
+                        alninfo['nofeat_{}'.format('A' if _ambig else 'U')] += 1
+                        if _update_sam:
+                            [p.write(bam_u) for p in alns]
+                        continue
+
+                    """ Fragment overlaps with annotation """
+                    alninfo['feat_{}'.format('A' if _ambig else 'U')] += 1
+
+                    """ Find the best alignment for each locus """
+                    for m in process_overlap_frag(_mapped, overlap_feats):
+                        _mappings.append((ci, m[0], m[1], m[2], m[3]))
+
                     if _update_sam:
-                        alns[0].write(bam_u)
-                    continue
-
-                """ If running with single cell data, add cell """
-                if self.single_cell and alns[0].r1.has_tag(self.opts.barcode_tag):
-                    self.read_barcodes[alns[0].query_id] = dict(alns[0].r1.get_tags()).get(self.opts.barcode_tag)
-
-                """ Fragment is ambiguous if multiple mappings"""
-                _mapped = [a for a in alns if not a.is_unmapped]
-                _ambig = len(_mapped) > 1
-
-                """ Update min and max scores """
-                _scores = [a.alnscore for a in _mapped]
-                _minAS = min(_minAS, *_scores)
-                _maxAS = max(_maxAS, *_scores)
-
-                """ Check whether fragment overlaps annotation """
-                overlap_feats = list(map(assign, _mapped))
-                has_overlap = any(f != _nfkey for f in overlap_feats)
-
-                """ Fragment has no overlap """
-                if not has_overlap:
-                    alninfo['nofeat_{}'.format('A' if _ambig else 'U')] += 1
-                    if _update_sam:
-                        [p.write(bam_u) for p in alns]
-                    continue
-
-                """ Fragment overlaps with annotation """
-                alninfo['feat_{}'.format('A' if _ambig else 'U')] += 1
-
-                """ Find the best alignment for each locus """
-                for m in process_overlap_frag(_mapped, overlap_feats):
-                    _mappings.append((ci, m[0], m[1], m[2], m[3]))
-
+                        [p.write(bam_t) for p in alns]
+            finally:
                 if _update_sam:
-                    [p.write(bam_t) for p in alns]
-
-        """ Loading complete """
-        if _update_sam:
-            bam_u.close()
-            bam_t.close()
+                    bam_u.close()
+                    bam_t.close()
 
         return _mappings, (_minAS, _maxAS), alninfo
 
@@ -652,13 +648,14 @@ class Polymerase:
 
     def __str__(self):
         if hasattr(self.opts, 'samfile'):
-            return '<Polymerase samfile=%s, gtffile=%s>'
+            return f'<Polymerase samfile={self.opts.samfile}, gtffile={getattr(self.opts, "gtffile", "?")}>'
         elif hasattr(self.opts, 'checkpoint'):
-            return '<Polymerase checkpoint=%s>'
+            return f'<Polymerase checkpoint={self.opts.checkpoint}>'
         else:
             return '<Polymerase>'
 
 
+# TODO: Single-cell subcommands are deferred to a future release.
 class scPolymerase(Polymerase):
     def __init__(self, opts):
         super().__init__(opts)
@@ -740,10 +737,10 @@ class Assigner:
                 return self.no_feature_key
 
         def _assign_pair_intersection_strict(pair):
-            pass
+            raise NotImplementedError('intersection-strict overlap mode is not yet implemented')
 
         def _assign_pair_union(pair):
-            pass
+            raise NotImplementedError('union overlap mode is not yet implemented')
 
         if self.overlap_mode == 'threshold':
             return _assign_pair_threshold

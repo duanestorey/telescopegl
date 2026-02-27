@@ -38,11 +38,7 @@ class SubcommandOptions:
     def __init__(self, args):
         self.opt_names, self.opt_groups = self._parse_yaml_opts(self.OPTS)
         for k, v in vars(args).items():
-            if k in self.opt_names:
-                setattr(self, k, v)
-            else:
-                # print("extra option: {} = {}".format(k,v))
-                setattr(self, k, v)
+            setattr(self, k, v)
 
     @classmethod
     def add_arguments(cls, parser):
@@ -75,7 +71,7 @@ class SubcommandOptions:
     def _parse_yaml_opts(opts_yaml):
         _opt_names = []
         _opt_groups = OrderedDict()
-        for grp in yaml.load(opts_yaml, Loader=yaml.FullLoader):
+        for grp in yaml.load(opts_yaml, Loader=yaml.SafeLoader):
             grp_name, args = list(grp.items())[0]
             _opt_groups[grp_name] = OrderedDict()
             for arg in args:
@@ -138,3 +134,27 @@ def configure_logging(opts):
 
 # A very large integer
 BIG_INT = 2**32 - 1
+
+
+def backend_display_name(be):
+    """Human-readable backend name for console output."""
+    names = {
+        'gpu': 'GPU (CuPy)',
+        'cpu_optimized': 'CPU-Optimized (Numba)',
+        'cpu_stock': 'CPU (scipy)',
+    }
+    return names.get(be.name, be.name)
+
+
+def collect_output_files(outdir):
+    """Collect output files relative to outdir, sorted with top-level first."""
+    import os
+
+    results = []
+    for root, _dirs, files in os.walk(outdir):
+        for f in sorted(files):
+            relpath = os.path.relpath(os.path.join(root, f), outdir)
+            results.append(relpath)
+    # Sort: top-level files first, then subdirectory files
+    results.sort(key=lambda p: (os.sep in p, p))
+    return results

@@ -127,7 +127,7 @@ class PolymeraseLikelihood:
         lg.debug('completed lnl')
         return cur
 
-    def em(self, use_likelihood=False, loglev=lg.WARNING, save_memory=True):
+    def em(self, use_likelihood=False, loglev=lg.WARNING):
         """Run EM algorithm until convergence or max iterations."""
         inum = 0
         converged = False
@@ -264,7 +264,7 @@ class PolymeraseLikelihood:
             sub_matrix, feat_indices, row_indices = block_info
             sub_tl = PolymeraseLikelihood._from_block(sub_matrix, self)
             sub_tl.em(use_likelihood=use_likelihood, loglev=lg.DEBUG)
-            return (sub_tl.pi, sub_tl.theta, sub_tl.z, sub_tl.lnl)
+            return (sub_tl.pi, sub_tl.theta, sub_tl.z, sub_tl.lnl, sub_tl.pi_init, sub_tl.num_iterations)
 
         backend = get_backend()
         if backend.threadsafe_parallelism:
@@ -278,8 +278,11 @@ class PolymeraseLikelihood:
             lg.log(loglev, f'Sequential EM: {n_components} blocks')
             block_results = [_solve_block(b) for b in blocks]
 
+        # Separate EM outputs from tracking data
+        em_results = [(pi_b, theta_b, z_b, lnl_b) for pi_b, theta_b, z_b, lnl_b, _, _ in block_results]
+
         # Merge results back into full-size arrays
-        pi, theta, z_rows, z_cols, z_data, lnl = merge_results(block_results, blocks, self.K)
+        pi, theta, z_rows, z_cols, z_data, lnl = merge_results(em_results, blocks, self.K)
 
         N = self.raw_scores.shape[0]
         self.pi = pi
@@ -287,10 +290,17 @@ class PolymeraseLikelihood:
         self.z = self._csr_class(scipy.sparse.csr_matrix((z_data, (z_rows, z_cols)), shape=(N, self.K)))
         self.lnl = lnl
 
-        # Set pi_init from first block (approximate)
-        self.pi_init = pi.copy()
+        # Reconstruct pi_init from per-block pi_init values
+        pi_init = np.zeros(self.K, dtype=np.float64)
+        for (_, _, _, _, pi_init_b, _), (_, feat_indices, _) in zip(block_results, blocks):
+            pi_init[feat_indices] = pi_init_b
+        pi_init_sum = pi_init.sum()
+        if pi_init_sum > 0:
+            pi_init /= pi_init_sum
+        self.pi_init = pi_init
 
-        self.num_iterations = self.max_iter  # approximate (blocks converge independently)
+        # num_iterations = max across all blocks
+        self.num_iterations = max(r[5] for r in block_results)
         lg.log(loglev, f'EM parallel completed across {n_components} blocks.')
         lg.log(loglev, f'Final log-likelihood: {self.lnl:f}.')
         return

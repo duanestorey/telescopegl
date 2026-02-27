@@ -64,7 +64,7 @@ class PluginRegistry:
                 self._primers.append(instance)
                 lg.info(f'Loaded primer: {instance.name} v{instance.version}')
             except Exception as exc:
-                lg.warning(f"Failed to load primer '{name}': {exc}")
+                lg.warning(f"Failed to load primer '{name}': {exc}", exc_info=True)
 
         # Load cofactors whose primer is active
         active_primer_names = {p.name for p in self._primers}
@@ -81,7 +81,7 @@ class PluginRegistry:
                 self._cofactors.append(instance)
                 lg.info(f"Loaded cofactor: {instance.name} (for primer '{instance.primer_name}')")
             except Exception as exc:
-                lg.warning(f"Failed to load cofactor '{name}': {exc}")
+                lg.warning(f"Failed to load cofactor '{name}': {exc}", exc_info=True)
 
     # -- Configuration -------------------------------------------------------
 
@@ -91,13 +91,13 @@ class PluginRegistry:
             try:
                 p.configure(opts, compute_ops)
             except Exception as exc:
-                lg.warning(f"Primer '{p.name}' configure failed: {exc}")
+                lg.warning(f"Primer '{p.name}' configure failed: {exc}", exc_info=True)
 
         for c in self._cofactors:
             try:
                 c.configure(opts, compute_ops)
             except Exception as exc:
-                lg.warning(f"Cofactor '{c.name}' configure failed: {exc}")
+                lg.warning(f"Cofactor '{c.name}' configure failed: {exc}", exc_info=True)
 
     # -- Hook notification ---------------------------------------------------
 
@@ -115,7 +115,7 @@ class PluginRegistry:
             try:
                 method(snapshot)
             except Exception as exc:
-                lg.warning(f"Primer '{p.name}' {hook_name} failed: {exc}")
+                lg.warning(f"Primer '{p.name}' {hook_name} failed: {exc}", exc_info=True)
 
     # -- Commit & transform --------------------------------------------------
 
@@ -131,7 +131,7 @@ class PluginRegistry:
                 lg.info(f'Committing primer: {p.name}')
                 p.commit(primer_dir, exp_tag, console=console, stopwatch=stopwatch)
             except Exception as exc:
-                lg.warning(f"Primer '{p.name}' commit failed: {exc}")
+                lg.warning(f"Primer '{p.name}' commit failed: {exc}", exc_info=True)
                 continue
 
             # Run cofactors for this primer
@@ -155,7 +155,7 @@ class PluginRegistry:
                 except Exception as exc:
                     if stopwatch:
                         stopwatch.stop()
-                    lg.warning(f"Cofactor '{c.name}' transform failed: {exc}")
+                    lg.warning(f"Cofactor '{c.name}' transform failed: {exc}", exc_info=True)
             if _primer_cofactors and stopwatch:
                 # Stop the top-level Cofactors timer if sub-stages didn't
                 # already consume it (stop is safe to call when inactive)

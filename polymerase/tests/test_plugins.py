@@ -236,7 +236,9 @@ class TestAssignPrimer:
 
         p = AssignPrimer()
         assert p.name == 'assign'
-        assert p.version == '2.0.1'
+        from polymerase import __version__
+
+        assert p.version == __version__
 
     def test_assign_primer_produces_output(self):
         """Run assign primer on test data, verify output files."""

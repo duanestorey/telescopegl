@@ -4,6 +4,115 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-27
+
+Comprehensive code review: 43 fixes across 22 files addressing resource safety,
+correctness, dead code, and architectural standardization.
+
+### Fixed
+
+- **Resource safety**: BAM file handles in `_load_sequential` wrapped in
+  try/finally. `Pool` in `_load_parallel` uses context manager. File handles
+  in `_mapping_fromfiles`, `fetch_region`, and GTF loading all use proper
+  context managers or try/finally.
+
+- **Operator precedence bug in `get_random_seed`**: `% shape[0] * shape[1]`
+  was `(% shape[0]) * shape[1]` due to Python precedence; fixed to
+  `% (shape[0] * shape[1])`.
+
+- **`__str__` on Polymerase**: Was returning unformatted `%s` placeholders;
+  now uses f-strings with actual attribute values.
+
+- **`em_parallel` tracking**: `pi_init` now reconstructed from per-block
+  initial values (was just a copy of final pi). `num_iterations` is now the
+  max across blocks (was hardcoded to `max_iter`).
+
+- **`update_sam` KeyError**: `read_index[...]` replaced with `.get()` + skip
+  to handle fragments present in tmp BAM but filtered from the matrix.
+
+- **Stub overlap modes**: `intersection-strict` and `union` now raise
+  `NotImplementedError` instead of silently returning `None`.
+
+- **Numba `threshold_filter`/`indicator`**: Added missing `eliminate_zeros()`
+  calls, matching the `binmax`/`choose_random` pattern.
+
+- **`np.seterr` leak**: `_recip0` now uses `np.errstate` context manager.
+
+- **`np.random.choice(range(...))`**: Replaced with `np.random.randint()` in
+  `choose_random` (avoids materializing a Python list).
+
+- **`find_blocks` memory**: Binary adjacency matrix uses `np.bool_` instead
+  of `np.float64` (8x smaller).
+
+- **`split_matrix` type preservation**: Uses `type(score_matrix)(sub)` to
+  preserve `CpuOptimizedCsrMatrix` through block decomposition.
+
+- **GPU `_to_cpu`**: Now checks `cpsparse.issparse()` first, correctly
+  transferring CuPy sparse matrices back to scipy. Fixes `multiply`, `dot`,
+  and `sum` on GPU backend.
+
+- **GPU `to_sparse`**: Returns CuPy sparse on GPU backend instead of scipy.
+
+- **GPU array utilities**: `zeros`, `array`, `arange` no longer immediately
+  `.get()` results back to CPU, keeping data on GPU as intended.
+
+- **`fetch_bundle` StopIteration**: Catches `StopIteration` on empty BAM
+  instead of propagating.
+
+- **`intervaltree` save/load**: `run_stranded` now persisted in pickle.
+
+- **`bisect.py` `feature_length`**: Fixed incorrect `self._locus[locus_idx]`
+  lookup — `locus_idx` was already the name string, not an index.
+
+- **`bisect.py` `lookup` assert**: Replaced `assert len(possible) == 1` with
+  proper `ValueError`.
+
+- **`annotation/__init__.py` error message**: Now shows the actual invalid
+  class name and states only "intervaltree" is supported.
+
+- **`fetch_region` assert**: Replaced `assert CODES[ci][0] == 'PX*'` with
+  warning log.
+
+- **AssignPrimer version**: Now imports `__version__` from package instead of
+  hardcoding.
+
+- **`yaml.FullLoader`**: Replaced with `yaml.SafeLoader` in CLI option parsing.
+
+### Added
+
+- **Auto-download default annotation**: When no `--gtffile` is specified and
+  the bundled GTF is not present (e.g., pip install), automatically downloads
+  `retro.hg38.v1` from `mlbendall/telescope_annotation_db` to
+  `~/.polymerase/annotations/`. Cached for subsequent runs.
+
+- **`choose_random` and `indicator` abstract methods** on `ComputeOps` ABC,
+  with implementations in both `CpuOps` and `GpuOps`.
+
+- **Package name validation** in `polymerase install` — rejects names that
+  don't match PEP 508 format before invoking pip.
+
+- **`exc_info=True`** on all registry warning handlers for better debugging.
+
+- **Shared CLI utilities**: `backend_display_name()` and
+  `collect_output_files()` moved from `assign.py` to `cli/__init__.py`,
+  eliminating cross-module imports in `resume.py`.
+
+### Removed
+
+- Dead `_norm_loop` method from `csr_matrix_plus`.
+- Dead `save_memory` parameter from `em()`.
+- Dead `_known_cols` set and `_parts` assignment in normalize cofactor.
+- Dead `if scipy.sparse.issparse(m): pass` in GPU `nmf`.
+- Dead if/else branch in `SubcommandOptions.__init__`.
+- `cython` from runtime dependencies (kept in build-system.requires).
+
+### Changed
+
+- `_resolve_duplicates_max` uses `np.maximum.reduceat` instead of Python loop.
+- Version bumped to 2.1.0 in `__init__.py` and `pyproject.toml`.
+
+---
+
 ## [2.0.3](https://github.com/duanestorey/polymerase/tree/main) — 2026-02-26
 
 Production pipeline fixes from testing against full RepeatMasker GTFs and
