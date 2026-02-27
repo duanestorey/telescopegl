@@ -24,4 +24,6 @@ def get_annotation_class(annotation_class_name):
 
         return _AnnotationIntervalTree
     else:
-        raise NotImplementedError('Choices are "htseq" or "intervaltree".')
+        raise NotImplementedError(
+            f'Unknown annotation class "{annotation_class_name}". Only "intervaltree" is supported.'
+        )

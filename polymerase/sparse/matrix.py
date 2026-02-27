@@ -12,10 +12,9 @@ import scipy.sparse
 
 def _recip0(v):
     """Return the reciprocal of a vector"""
-    old_settings = np.seterr(divide='ignore')
-    ret = 1.0 / v
+    with np.errstate(divide='ignore'):
+        ret = 1.0 / v
     ret[np.isinf(ret)] = 0
-    np.seterr(**old_settings)
     return ret
 
 
@@ -37,7 +36,6 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
              [ 0.          0.          1.        ]
              [ 0.26666667  0.33333333  0.4       ]]
         """
-        # return self._norm_loop(axis)
         return self._norm(axis)
 
     def _norm(self, axis=None):
@@ -47,21 +45,6 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
             raise NotImplementedError
         elif axis == 1:
             return type(self)(self.multiply(_recip0(self.sum(1))))
-
-    def _norm_loop(self, axis=None):
-        if axis is None:
-            ret = self.copy().astype(np.float64)
-            ret.data /= sum(ret)
-            return ret
-        elif axis == 0:
-            raise NotImplementedError
-        elif axis == 1:
-            ret = self.copy().astype(np.float64)
-            rowiter = zip(ret.indptr[:-1], ret.indptr[1:], ret.sum(1).A1)
-            for d_start, d_end, d_sum in rowiter:
-                if d_sum != 0:
-                    ret.data[d_start:d_end] /= d_sum
-            return ret
 
     def scale(self, axis=None):
         """Scale matrix so values are between 0 and 1
@@ -136,7 +119,7 @@ class csr_matrix_plus(scipy.sparse.csr_matrix):
             ret = self.copy()
             for d_start, d_end in zip(ret.indptr[:-1], ret.indptr[1:]):
                 if d_end - d_start > 1:
-                    chosen = np.random.choice(range(d_start, d_end))
+                    chosen = np.random.randint(d_start, d_end)
                     for j in range(d_start, d_end):
                         if j != chosen:
                             ret.data[j] = 0

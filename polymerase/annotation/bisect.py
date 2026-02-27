@@ -12,6 +12,8 @@ GTFRow = namedtuple('GTFRow', ['chrom', 'source', 'feature', 'start', 'end', 'sc
 
 
 class _AnnotationBisect:
+    """Bisect-based annotation lookup. NOT YET IMPLEMENTED — use _AnnotationIntervalTree instead."""
+
     def __init__(self, gtffile, min_overlap=None, attr_name='locus'):
         self.key = attr_name
 
@@ -59,7 +61,8 @@ class _AnnotationBisect:
             return None
         else:
             possible = set(f[2] for f in feats)
-            assert len(possible) == 1, f'{feats}'
+            if len(possible) != 1:
+                raise ValueError(f'Ambiguous lookup at {chrom}:{pos} — overlapping features: {feats}')
             return possible.pop()
 
     def lookup_interval(self, chrom, spos, epos):
@@ -93,8 +96,8 @@ class _AnnotationBisect:
     def feature_length(self):
         _ret = {}
         for _chr, ilist in self._intervals.items():
-            for spos, epos, locus_idx in ilist:
-                _ret[self._locus[locus_idx]] = epos - spos
+            for spos, epos, locus_name in ilist:
+                _ret[locus_name] = epos - spos
         return _ret
 
     def intersect_blocks(self, ref, blocks):

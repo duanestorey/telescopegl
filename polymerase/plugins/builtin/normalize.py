@@ -66,18 +66,6 @@ class NormalizeCofactor(Cofactor):
         # Extract column names from the first line — they're the last
         # N tab-separated fields that match known column names
         first_fields = raw_lines[0].split('\t')
-        _known_cols = {  # noqa: F841 — kept for documentation of expected column names
-            'transcript',
-            'transcript_length',
-            'final_conf',
-            'final_prop',
-            'init_aligned',
-            'unique_count',
-            'init_best',
-            'init_best_random',
-            'init_best_avg',
-            'init_prop',
-        }
         # Find where the real columns start
         col_start = 0
         for i, f in enumerate(first_fields):
@@ -85,7 +73,6 @@ class NormalizeCofactor(Cofactor):
             if 'transcript' in f and i > 0:
                 # Split off the "transcript" from e.g. "overlap_ambig:1000transcript"
                 if f != 'transcript':
-                    _parts = f.split('transcript', 1)  # noqa: F841
                     first_fields[i] = 'transcript'
                 col_start = i
                 break

@@ -28,7 +28,7 @@ def find_blocks(score_matrix):
         (n_components, labels): number of blocks and per-feature label array.
     """
     # Binary indicator: which cells are nonzero
-    binary = (score_matrix > 0).astype(np.float64)
+    binary = (score_matrix > 0).astype(np.bool_)
     # K x K adjacency: features sharing fragments
     adj = binary.T @ binary
     n_components, labels = connected_components(adj, directed=False)
@@ -54,8 +54,8 @@ def split_matrix(score_matrix, labels, n_components):
         # Find rows with any nonzero in these columns
         row_indices = sub.getnnz(axis=1).nonzero()[0]
         sub = sub[row_indices, :]
-        # Convert to CSR (column slicing may produce CSC)
-        sub = scipy.sparse.csr_matrix(sub)
+        # Convert to CSR (column slicing may produce CSC), preserving matrix class
+        sub = type(score_matrix)(sub)
         blocks.append((sub, feat_indices, row_indices))
     return blocks
 

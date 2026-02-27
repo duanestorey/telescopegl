@@ -130,7 +130,9 @@ def update_sam(tmp_bam, read_index, feat_index, run_info, opts, tl, filename):
         for _code, pairs in alignment.fetch_fragments_seq(sf, until_eof=True):
             if len(pairs) == 0:
                 continue
-            ridx = read_index[pairs[0].query_id]
+            ridx = read_index.get(pairs[0].query_id)
+            if ridx is None:
+                continue
             for aln in pairs:
                 if aln.is_unmapped:
                     aln.write(outsam)

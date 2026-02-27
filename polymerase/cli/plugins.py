@@ -6,8 +6,14 @@
 
 """CLI subcommands for plugin management."""
 
+import re
 import subprocess
 import sys
+
+# PEP 508 package name: letters, digits, hyphens, underscores, dots
+_VALID_PACKAGE_RE = re.compile(
+    r'^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?(\[.*\])?(==|>=|<=|!=|~=|>|<)?[A-Za-z0-9.*]*$'
+)
 
 
 def list_plugins(args):
@@ -41,6 +47,9 @@ def list_plugins(args):
 def install_plugin(args):
     """Install a primer/cofactor package via pip."""
     package = args.package
+    if not _VALID_PACKAGE_RE.match(package):
+        print(f'Error: invalid package name: {package!r}')
+        sys.exit(1)
     print(f'Installing {package}...')
     result = subprocess.run(
         [sys.executable, '-m', 'pip', 'install', package],

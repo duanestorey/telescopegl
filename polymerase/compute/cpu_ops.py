@@ -66,6 +66,20 @@ class CpuOps(ComputeOps):
             matrix = csr_matrix_plus(matrix)
         return matrix.threshold_filter(thresh)
 
+    def choose_random(self, matrix, axis):
+        from ..sparse.matrix import csr_matrix_plus
+
+        if not isinstance(matrix, csr_matrix_plus):
+            matrix = csr_matrix_plus(matrix)
+        return matrix.choose_random(axis)
+
+    def indicator(self, matrix):
+        from ..sparse.matrix import csr_matrix_plus
+
+        if not isinstance(matrix, csr_matrix_plus):
+            matrix = csr_matrix_plus(matrix)
+        return matrix.indicator()
+
     # --- Dense linear algebra ---
 
     def svd(self, matrix, k):

@@ -130,6 +130,7 @@ class CpuOptimizedCsrMatrix(csr_matrix_plus):
             (_data, self.indices.copy(), self.indptr.copy()),
             shape=self.shape,
         )
+        ret.eliminate_zeros()
         return ret
 
     def indicator(self):
@@ -141,4 +142,5 @@ class CpuOptimizedCsrMatrix(csr_matrix_plus):
             (_data, self.indices.copy(), self.indptr.copy()),
             shape=self.shape,
         )
+        ret.eliminate_zeros()
         return ret

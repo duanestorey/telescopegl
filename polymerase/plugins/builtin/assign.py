@@ -17,6 +17,7 @@ from time import time
 
 import numpy as np
 
+from ... import __version__
 from ...utils.helpers import format_minutes as fmtmins
 from ..abc import Primer
 
@@ -34,7 +35,7 @@ class AssignPrimer(Primer):
 
     @property
     def version(self) -> str:
-        return '2.0.1'
+        return __version__
 
     def configure(self, opts, compute) -> None:
         self._opts = opts

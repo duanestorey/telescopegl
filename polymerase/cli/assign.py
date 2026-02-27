@@ -17,15 +17,49 @@ from time import time
 
 from ..core.model import Polymerase, scPolymerase
 from ..utils.helpers import format_minutes as fmtmins
-from . import SubcommandOptions, configure_logging
+from . import SubcommandOptions, backend_display_name, collect_output_files, configure_logging
 from .console import Stopwatch
 
 # Default bundled GTF annotation (retro.hg38 from telescope_annotation_db)
-_DEFAULT_GTF = os.path.join(
+_BUNDLED_GTF = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'data',
     'retro.hg38.gtf',
 )
+
+# Cached GTF download location
+_CACHED_GTF = os.path.join(os.path.expanduser('~'), '.polymerase', 'annotations', 'retro.hg38.gtf')
+
+# Download URL from mlbendall/telescope_annotation_db
+_DEFAULT_GTF_URL = (
+    'https://github.com/mlbendall/telescope_annotation_db/raw/master/builds/retro.hg38.v1/transcripts.gtf'
+)
+
+
+def _ensure_default_annotation():
+    """Return path to default annotation, downloading if necessary."""
+    # Prefer bundled copy
+    if os.path.exists(_BUNDLED_GTF):
+        return _BUNDLED_GTF
+    # Check cache
+    if os.path.exists(_CACHED_GTF):
+        return _CACHED_GTF
+    # Download
+    import urllib.request
+
+    lg.info('Downloading default annotation retro.hg38.v1 from telescope_annotation_db...')
+    os.makedirs(os.path.dirname(_CACHED_GTF), exist_ok=True)
+    try:
+        urllib.request.urlretrieve(_DEFAULT_GTF_URL, _CACHED_GTF)
+        lg.info(f'Saved to {_CACHED_GTF}')
+    except Exception as exc:
+        raise RuntimeError(
+            f'Failed to download default annotation: {exc}\n'
+            f'Please provide --gtffile manually or download from:\n  {_DEFAULT_GTF_URL}'
+        ) from exc
+    return _CACHED_GTF
+
+
 from ..annotation import get_annotation_class  # noqa: E402
 from ..sparse import backend  # noqa: E402
 
@@ -39,8 +73,8 @@ class IDOptions(SubcommandOptions):
 
         # Default to bundled retro.hg38 annotation if no GTF specified
         if getattr(self, 'gtffile', None) is None:
-            self.gtffile = _DEFAULT_GTF
-            lg.info('Using bundled annotation: %s', os.path.basename(self.gtffile))
+            self.gtffile = _ensure_default_annotation()
+            lg.info('Using default annotation: %s', os.path.basename(self.gtffile))
 
         # Parse --classes into a set (or None for all)
         raw_classes = getattr(self, 'classes', None)
@@ -420,28 +454,6 @@ def _parse_primers_arg(opts):
     return [p.strip() for p in raw.split(',') if p.strip()]
 
 
-def _collect_output_files(outdir):
-    """Collect output files relative to outdir, sorted with top-level first."""
-    results = []
-    for root, _dirs, files in os.walk(outdir):
-        for f in sorted(files):
-            relpath = os.path.relpath(os.path.join(root, f), outdir)
-            results.append(relpath)
-    # Sort: top-level files first, then subdirectory files
-    results.sort(key=lambda p: (os.sep in p, p))
-    return results
-
-
-def _backend_display_name(be):
-    """Human-readable backend name for console output."""
-    names = {
-        'gpu': 'GPU (CuPy)',
-        'cpu_optimized': 'CPU-Optimized (Numba)',
-        'cpu_stock': 'CPU (scipy)',
-    }
-    return names.get(be.name, be.name)
-
-
 def run(args, sc=True):
     """Platform orchestrator: loads data, builds snapshots, delegates to primers.
 
@@ -467,7 +479,10 @@ def run(args, sc=True):
     _be = backend.get_backend()
     _bam_name = os.path.basename(opts.samfile)
     _gtf_name = os.path.basename(opts.gtffile)
-    _using_bundled = os.path.abspath(opts.gtffile) == os.path.abspath(_DEFAULT_GTF)
+    _using_bundled = os.path.abspath(opts.gtffile) in (
+        os.path.abspath(_BUNDLED_GTF),
+        os.path.abspath(_CACHED_GTF),
+    )
 
     console.section('Input')
     console.item('BAM', _bam_name)
@@ -475,7 +490,7 @@ def run(args, sc=True):
         console.item('Annotation', f'{_gtf_name} [bundled]')
     else:
         console.item('Annotation', _gtf_name)
-    console.item('Backend', _backend_display_name(_be))
+    console.item('Backend', backend_display_name(_be))
     console.blank()
 
     # --- Platform: Load Data ---
@@ -571,7 +586,7 @@ def run(args, sc=True):
     registry.commit_all(opts.outdir, opts.exp_tag, console=console, stopwatch=sw)
 
     # Output file summary
-    _output_files = _collect_output_files(opts.outdir)
+    _output_files = collect_output_files(opts.outdir)
     if _output_files:
         console.blank()
         console.section('Output ({} files in {})'.format(len(_output_files), opts.outdir + '/'))
