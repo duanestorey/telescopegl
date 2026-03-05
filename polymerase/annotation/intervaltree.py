@@ -32,9 +32,17 @@ class _AnnotationIntervalTree:
         self.itree = defaultdict(IntervalTree)
         self.run_stranded = stranded_mode is not None and stranded_mode != 'None'
 
+        # Normalize feature_type to a set for membership testing
+        if isinstance(feature_type, str):
+            _feature_types = {t.strip() for t in feature_type.split(',') if t.strip()}
+        elif isinstance(feature_type, (set, frozenset, list, tuple)):
+            _feature_types = set(feature_type)
+        else:
+            _feature_types = {'exon'}
+
         # Auto-detect class attribute name for --classes filtering
         if classes and isinstance(gtf_file, str):
-            _family_key, _class_key = detect_family_class_attrs(gtf_file)
+            _family_key, _class_key = detect_family_class_attrs(gtf_file, feature_types=_feature_types)
             lg.info(f'Filtering GTF by classes: {classes} (using attribute: {_class_key})')
         else:
             _class_key = None
@@ -47,7 +55,7 @@ class _AnnotationIntervalTree:
                 if line.startswith('#'):
                     continue
                 f = GTFRow(*line.strip('\n').split('\t'))
-                if f.feature != feature_type:
+                if f.feature not in _feature_types:
                     continue
                 attr = dict(re.findall(r'(\w+)\s+"(.+?)";', f.attribute))
                 attr['strand'] = f.strand

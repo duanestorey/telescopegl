@@ -34,15 +34,22 @@ def _parse_gtf_attributes(attr_str):
     return attrs
 
 
-def _build_locus_metadata(gtf_path, locus_attr='locus'):
-    """Build mapping from locus name to family/class from GTF exon lines.
+def _build_locus_metadata(gtf_path, locus_attr='locus', feature_types=None):
+    """Build mapping from locus name to family/class from GTF lines.
 
     Auto-detects whether the GTF uses repFamily/repClass or family_id/class_id.
+
+    Args:
+        gtf_path: Path to GTF file.
+        locus_attr: GTF attribute key for locus names.
+        feature_types: Set of GTF feature types to scan. Defaults to ``{'exon'}``.
 
     Returns:
         dict: {locus_name: {'repFamily': str, 'repClass': str}}
     """
-    family_key, class_key = detect_family_class_attrs(gtf_path)
+    if feature_types is None:
+        feature_types = {'exon'}
+    family_key, class_key = detect_family_class_attrs(gtf_path, feature_types=feature_types)
     lg.debug(f'family-agg: detected GTF attributes: family={family_key}, class={class_key}')
 
     meta = {}
@@ -53,15 +60,18 @@ def _build_locus_metadata(gtf_path, locus_attr='locus'):
             parts = line.strip().split('\t')
             if len(parts) < 9:
                 continue
-            if parts[2] != 'exon':
+            if parts[2] not in feature_types:
                 continue
             attrs = _parse_gtf_attributes(parts[8])
             locus = attrs.get(locus_attr)
-            if locus and locus not in meta:
-                meta[locus] = {
-                    'repFamily': attrs.get(family_key, 'Unknown'),
-                    'repClass': attrs.get(class_key, 'Unknown'),
-                }
+            if not locus:
+                continue
+            family = attrs.get(family_key, 'Unknown')
+            cls = attrs.get(class_key, 'Unknown')
+            if locus not in meta:
+                meta[locus] = {'repFamily': family, 'repClass': cls}
+            elif meta[locus]['repFamily'] == 'Unknown' and family != 'Unknown':
+                meta[locus] = {'repFamily': family, 'repClass': cls}
     return meta
 
 
@@ -83,6 +93,7 @@ class FamilyAggCofactor(Cofactor):
     def configure(self, opts, compute) -> None:
         self._gtf_path = getattr(opts, 'gtffile', None)
         self._attribute = getattr(opts, 'attribute', 'locus')
+        self._feature_types = getattr(opts, 'feature_types', None)
 
     def transform(self, primer_output_dir, output_dir, exp_tag, console=None, stopwatch=None) -> None:
         # Find assign counts file
@@ -102,7 +113,7 @@ class FamilyAggCofactor(Cofactor):
             return
 
         # Build locus -> family/class mapping
-        meta = _build_locus_metadata(self._gtf_path, self._attribute)
+        meta = _build_locus_metadata(self._gtf_path, self._attribute, feature_types=self._feature_types)
 
         # Add family/class columns
         counts['repFamily'] = counts['transcript'].map(lambda t: meta.get(t, {}).get('repFamily', 'Unknown'))

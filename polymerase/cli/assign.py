@@ -83,6 +83,10 @@ class IDOptions(SubcommandOptions):
         else:
             self.classes = None
 
+        # Parse --feature_type into a frozenset
+        raw_ft = getattr(self, 'feature_type', 'exon')
+        self.feature_types = frozenset(t.strip() for t in raw_ft.split(',') if t.strip())
+
         if getattr(self, 'outdir', '.') == '.':
             lg.info('Output will be written to current directory. Use --outdir for cleaner organization.')
 
@@ -121,6 +125,11 @@ class BulkIDOptions(IDOptions):
             default: null
             help: Comma-separated list of TE classes to include (e.g., LTR,LINE,SINE).
                   Filters GTF during loading. If omitted, all classes are loaded.
+        - feature_type:
+            default: exon
+            help: Comma-separated list of GTF feature types (column 3) to load.
+                  Default is "exon". Use "exon,gene" to load both exon and gene
+                  features from a combined gene+TE annotation.
         - ncpu:
             default: 1
             type: int
@@ -295,6 +304,11 @@ class scIDOptions(IDOptions):
             default: null
             help: Comma-separated list of TE classes to include (e.g., LTR,LINE,SINE).
                   Filters GTF during loading. If omitted, all classes are loaded.
+        - feature_type:
+            default: exon
+            help: Comma-separated list of GTF feature types (column 3) to load.
+                  Default is "exon". Use "exon,gene" to load both exon and gene
+                  features from a combined gene+TE annotation.
         - ncpu:
             default: 1
             type: int
@@ -501,7 +515,9 @@ def run(args, sc=True):
     lg.info('Loading annotation...')
     sw.start('Annotation')
     stime = time()
-    annot = Annotation(opts.gtffile, opts.attribute, opts.stranded_mode, classes=opts.classes)
+    annot = Annotation(
+        opts.gtffile, opts.attribute, opts.stranded_mode, feature_type=opts.feature_types, classes=opts.classes
+    )
     _annot_elapsed = time() - stime
     sw.stop()
     lg.info(f'Loaded annotation in {fmtmins(_annot_elapsed)}')
@@ -542,6 +558,7 @@ def run(args, sc=True):
         num_features=len(annot.loci),
         gtf_path=opts.gtffile,
         attribute_name=opts.attribute,
+        feature_types=opts.feature_types,
     )
 
     annot = None  # free memory

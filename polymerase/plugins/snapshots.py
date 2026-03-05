@@ -21,6 +21,7 @@ class AnnotationSnapshot:
     num_features: int
     gtf_path: str
     attribute_name: str
+    feature_types: frozenset = frozenset(['exon'])
 
 
 @dataclass(frozen=True)

@@ -122,6 +122,27 @@ class TestSnapshots:
         assert snap.gtf_path == '/tmp/test.gtf'
         assert snap.attribute_name == 'locus'
 
+    def test_annotation_snapshot_feature_types_default(self):
+        snap = AnnotationSnapshot(
+            loci={'A': []},
+            feature_lengths={'A': 100},
+            num_features=1,
+            gtf_path='/tmp/test.gtf',
+            attribute_name='locus',
+        )
+        assert snap.feature_types == frozenset(['exon'])
+
+    def test_annotation_snapshot_feature_types_custom(self):
+        snap = AnnotationSnapshot(
+            loci={'A': []},
+            feature_lengths={'A': 100},
+            num_features=1,
+            gtf_path='/tmp/test.gtf',
+            attribute_name='locus',
+            feature_types=frozenset(['exon', 'gene']),
+        )
+        assert snap.feature_types == frozenset(['exon', 'gene'])
+
 
 # =========================================================================
 # Registry
@@ -364,6 +385,38 @@ class TestFamilyAggCofactor:
             class_f = os.path.join(out_dir, 'test-class_counts.tsv')
             assert os.path.exists(family_f)
             assert os.path.exists(class_f)
+
+    def test_transform_unknown_features(self):
+        """Features without repFamily/repClass should be labeled 'Unknown'."""
+        from polymerase.plugins.builtin.family_agg import FamilyAggCofactor
+
+        _base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        gtf_path = os.path.join(_base, 'data', 'annotation.gtf')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a counts file with a locus that doesn't exist in the GTF
+            counts_file = os.path.join(tmpdir, 'test-TE_counts.tsv')
+            with open(counts_file, 'w') as fh:
+                fh.write('transcript\tcount\n')
+                fh.write('HML2_1p36.21a\t50\n')
+                fh.write('NONEXISTENT_LOCUS\t25\n')
+
+            out_dir = os.path.join(tmpdir, 'family-agg')
+            os.makedirs(out_dir)
+
+            class MockOpts:
+                gtffile = gtf_path
+                attribute = 'locus'
+                feature_types = None
+
+            c = FamilyAggCofactor()
+            c.configure(MockOpts(), None)
+            c.transform(tmpdir, out_dir, 'test')
+
+            import pandas as pd
+
+            family_df = pd.read_csv(os.path.join(out_dir, 'test-family_counts.tsv'), sep='\t')
+            assert 'Unknown' in family_df['repFamily'].values
 
 
 class TestNormalizeCofactor:

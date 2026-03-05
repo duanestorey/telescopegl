@@ -205,8 +205,8 @@ class Polymerase:
         return ret % 4294967295
 
     @staticmethod
-    def _get_te_regions(annotation, padding=500):
-        """Extract TE locus coordinates with padding, merge overlapping.
+    def _get_annotation_regions(annotation, padding=500):
+        """Extract annotation locus coordinates with padding, merge overlapping.
 
         Args:
             annotation: Annotation object with itree or loci dict.
@@ -254,8 +254,8 @@ class Polymerase:
         assign = Assigner(annotation, _nfkey, _omode, _othresh, self.opts.stranded_mode).assign_func()
 
         alninfo = Counter()
-        te_regions = self._get_te_regions(annotation)
-        lg.info(f'Indexed loading: {len(te_regions)} merged TE regions')
+        te_regions = self._get_annotation_regions(annotation)
+        lg.info(f'Indexed loading: {len(te_regions)} merged annotation regions')
 
         _threads = min(4, max(1, getattr(self.opts, 'ncpu', 1)))
 

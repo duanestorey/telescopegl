@@ -9,8 +9,8 @@
 import re
 
 
-def detect_family_class_attrs(gtf_path):
-    """Probe the first exon line in a GTF to detect family/class attribute names.
+def detect_family_class_attrs(gtf_path, feature_types=None):
+    """Probe the first matching line in a GTF to detect family/class attribute names.
 
     Supports two naming conventions:
     - retro.hg38 format: ``repFamily`` / ``repClass``
@@ -18,10 +18,13 @@ def detect_family_class_attrs(gtf_path):
 
     Args:
         gtf_path: Path to GTF file.
+        feature_types: Set of GTF feature types to consider. Defaults to ``{'exon'}``.
 
     Returns:
         (family_key, class_key) tuple, or ('repFamily', 'repClass') as default.
     """
+    if feature_types is None:
+        feature_types = {'exon'}
     with open(gtf_path) as fh:
         for line in fh:
             if line.startswith('#'):
@@ -29,11 +32,11 @@ def detect_family_class_attrs(gtf_path):
             parts = line.strip().split('\t')
             if len(parts) < 9:
                 continue
-            if parts[2] != 'exon':
+            if parts[2] not in feature_types:
                 continue
             attrs = dict(re.findall(r'(\w+)\s+"(.+?)";', parts[8]))
             if 'family_id' in attrs:
                 return ('family_id', 'class_id')
             return ('repFamily', 'repClass')
-    # Fallback if no exon lines found
+    # Fallback if no matching lines found
     return ('repFamily', 'repClass')

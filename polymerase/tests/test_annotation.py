@@ -7,7 +7,11 @@
 import os
 
 from polymerase.annotation import get_annotation_class
+from polymerase.annotation.gtf_utils import detect_family_class_attrs
 from polymerase.tests import TEST_DATA_DIR
+
+# Path to bundled annotation with gene + exon lines
+BUNDLED_GTF = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'annotation.gtf')
 
 
 class TestAnnotationIntervalTree:
@@ -84,3 +88,104 @@ class TestAnnotationIntervalTree:
         assert sA.intersect_blocks('chr3', [(40000, 45000)])['locus8'] == 5001
         r = sA.intersect_blocks('chr3', [(44990, 46010)])
         assert r['locus8'] == 1021
+
+
+class TestMultiFeatureType:
+    """Tests for --feature_type support with multiple GTF feature types."""
+
+    @classmethod
+    def setup_class(cls):
+        cls.AnnotationClass = get_annotation_class('intervaltree')
+        cls.mixed_gtf = os.path.join(TEST_DATA_DIR, 'annotation_test.3.gtf')
+
+    def test_default_exon_only(self):
+        """Default feature_type='exon' loads only exon lines."""
+        annot = self.AnnotationClass(self.mixed_gtf, 'locus', None)
+        assert len(annot.loci) == 4  # locus1-4 have exon lines
+
+    def test_gene_only(self):
+        """feature_type='gene' loads only gene lines."""
+        annot = self.AnnotationClass(self.mixed_gtf, 'locus', None, feature_type='gene')
+        assert len(annot.loci) == 4  # locus1-4 have gene lines
+
+    def test_exon_and_gene(self):
+        """feature_type={'exon', 'gene'} loads both types."""
+        annot = self.AnnotationClass(self.mixed_gtf, 'locus', None, feature_type={'exon', 'gene'})
+        assert len(annot.loci) == 4  # same loci, but covered by both types
+
+    def test_exon_gene_and_transcript(self):
+        """feature_type with transcript includes locus5."""
+        annot = self.AnnotationClass(self.mixed_gtf, 'locus', None, feature_type={'exon', 'gene', 'transcript'})
+        assert len(annot.loci) == 5  # locus5 only has transcript line
+        assert 'locus5' in annot.loci
+
+    def test_transcript_only(self):
+        """feature_type='transcript' loads only the transcript line."""
+        annot = self.AnnotationClass(self.mixed_gtf, 'locus', None, feature_type='transcript')
+        assert len(annot.loci) == 1
+        assert 'locus5' in annot.loci
+
+    def test_comma_separated_string(self):
+        """Comma-separated string is parsed correctly."""
+        annot = self.AnnotationClass(self.mixed_gtf, 'locus', None, feature_type='exon,gene')
+        assert len(annot.loci) == 4
+
+    def test_frozenset_accepted(self):
+        """frozenset is accepted as feature_type."""
+        annot = self.AnnotationClass(self.mixed_gtf, 'locus', None, feature_type=frozenset(['exon', 'transcript']))
+        assert len(annot.loci) == 5
+
+    def test_list_accepted(self):
+        """list is accepted as feature_type."""
+        annot = self.AnnotationClass(self.mixed_gtf, 'locus', None, feature_type=['exon'])
+        assert len(annot.loci) == 4
+
+    def test_bundled_gtf_default_exon(self):
+        """Bundled annotation.gtf: default loads 99 loci (exon lines)."""
+        if not os.path.exists(BUNDLED_GTF):
+            import pytest
+
+            pytest.skip('Bundled GTF not available')
+        annot = self.AnnotationClass(BUNDLED_GTF, 'locus', None)
+        assert len(annot.loci) == 99
+
+    def test_bundled_gtf_exon_and_gene(self):
+        """Bundled annotation.gtf: exon+gene loads more features (gene lines add loci)."""
+        if not os.path.exists(BUNDLED_GTF):
+            import pytest
+
+            pytest.skip('Bundled GTF not available')
+        annot_exon = self.AnnotationClass(BUNDLED_GTF, 'locus', None, feature_type='exon')
+        annot_both = self.AnnotationClass(BUNDLED_GTF, 'locus', None, feature_type={'exon', 'gene'})
+        # gene lines should not add new loci (same locus attribute) but they are loaded
+        assert len(annot_both.loci) >= len(annot_exon.loci)
+
+
+class TestDetectFamilyClassAttrsFeatureTypes:
+    """Test that detect_family_class_attrs respects feature_types."""
+
+    def test_default_uses_exon(self):
+        if not os.path.exists(BUNDLED_GTF):
+            import pytest
+
+            pytest.skip('Bundled GTF not available')
+        fam, cls = detect_family_class_attrs(BUNDLED_GTF)
+        assert fam == 'repFamily'
+        assert cls == 'repClass'
+
+    def test_explicit_exon(self):
+        if not os.path.exists(BUNDLED_GTF):
+            import pytest
+
+            pytest.skip('Bundled GTF not available')
+        fam, cls = detect_family_class_attrs(BUNDLED_GTF, feature_types={'exon'})
+        assert fam == 'repFamily'
+        assert cls == 'repClass'
+
+    def test_gene_feature_type(self):
+        if not os.path.exists(BUNDLED_GTF):
+            import pytest
+
+            pytest.skip('Bundled GTF not available')
+        fam, cls = detect_family_class_attrs(BUNDLED_GTF, feature_types={'gene'})
+        assert fam == 'repFamily' or fam == 'family_id'
